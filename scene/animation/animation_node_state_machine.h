@@ -181,12 +181,14 @@ public:
 
 	virtual void get_child_nodes(List<ChildNode> *r_child_nodes) override;
 
+	int get_multi_transition_count(const StringName &p_from, const StringName &p_to) const;
 	bool has_transition(const StringName &p_from, const StringName &p_to) const;
 	bool has_transition_from(const StringName &p_from) const;
 	bool has_transition_to(const StringName &p_to) const;
 	int find_transition(const StringName &p_from, const StringName &p_to) const;
 	Vector<int> find_transition_from(const StringName &p_from) const;
 	Vector<int> find_transition_to(const StringName &p_to) const;
+	void add_multi_transition(const StringName &p_from, const StringName &p_to, int p_index, const Ref<AnimationNodeStateMachineTransition> &p_transition);
 	void add_transition(const StringName &p_from, const StringName &p_to, const Ref<AnimationNodeStateMachineTransition> &p_transition);
 	Ref<AnimationNodeStateMachineTransition> get_transition(int p_transition) const;
 	StringName get_transition_from(int p_transition) const;
@@ -194,6 +196,7 @@ public:
 	int get_transition_count() const;
 	bool is_transition_across_group(int p_transition) const;
 	void remove_transition_by_index(const int p_transition);
+	void remove_multi_transition(const StringName &p_from, const StringName &p_to, int index);
 	void remove_transition(const StringName &p_from, const StringName &p_to);
 
 	void set_state_machine_type(StateMachineType p_state_machine_type);

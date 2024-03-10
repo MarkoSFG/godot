@@ -1453,6 +1453,16 @@ void AnimationNodeStateMachine::get_node_list(List<StringName> *r_nodes) const {
 	}
 }
 
+int AnimationNodeStateMachine::get_multi_transition_count(const StringName &p_from, const StringName &p_to) const {
+	int index = 0;
+	for (int i = 0; i < transitions.size(); i++) {
+		if (transitions[i].from == p_from && transitions[i].to == p_to) {
+			++index;
+		}
+	}
+	return index;
+}
+
 bool AnimationNodeStateMachine::has_transition(const StringName &p_from, const StringName &p_to) const {
 	for (int i = 0; i < transitions.size(); i++) {
 		if (transitions[i].from == p_from && transitions[i].to == p_to) {
@@ -1524,7 +1534,7 @@ bool AnimationNodeStateMachine::_can_connect(const StringName &p_name) {
 	return false;
 }
 
-void AnimationNodeStateMachine::add_transition(const StringName &p_from, const StringName &p_to, const Ref<AnimationNodeStateMachineTransition> &p_transition) {
+void AnimationNodeStateMachine::add_multi_transition(const StringName &p_from, const StringName &p_to, int p_idx, const Ref<AnimationNodeStateMachineTransition> &p_transition) {
 	if (updating_transitions) {
 		return;
 	}
@@ -1535,9 +1545,49 @@ void AnimationNodeStateMachine::add_transition(const StringName &p_from, const S
 	ERR_FAIL_COND(!_can_connect(p_to));
 	ERR_FAIL_COND(p_transition.is_null());
 
-	for (int i = 0; i < transitions.size(); i++) {
-		ERR_FAIL_COND(transitions[i].from == p_from && transitions[i].to == p_to);
+	updating_transitions = true;
+
+	Transition tr;
+	tr.from = p_from;
+	tr.to = p_to;
+	tr.transition = p_transition;
+
+	tr.transition->connect("advance_condition_changed", callable_mp(this, &AnimationNodeStateMachine::_tree_changed), CONNECT_REFERENCE_COUNTED);
+
+	// cycle through the list of transitions and compare from / to and insert the transition based on the passed p_index and how many from / to duplicates we find
+	if (transitions.size() == 0) {
+		transitions.push_back(tr);
+	} else if (p_idx <= 0) {
+		transitions.insert(0, tr);
+	} else {
+		int index = p_idx;
+		for (int i = 0; i < transitions.size() - 1; i++) {
+			if (transitions[i].from == p_from && transitions[i].to == p_to) {
+				--index;
+				if (index <= 0) {
+					transitions.insert(i + 1, tr);
+					break;
+				}
+			}
+		}
+		if (index > 0) {
+			transitions.push_back(tr);
+		}
 	}
+
+	updating_transitions = false;
+}
+
+void AnimationNodeStateMachine::add_transition(const StringName &p_from, const StringName &p_to, const Ref<AnimationNodeStateMachineTransition> &p_transition) {
+	if (updating_transitions) {
+		return;
+	}
+
+	ERR_FAIL_COND(p_from == end_node || p_to == start_node);
+	ERR_FAIL_COND(p_from == p_to);
+	ERR_FAIL_COND(!_can_connect(p_from));
+	ERR_FAIL_COND(!_can_connect(p_to));
+	ERR_FAIL_COND(p_transition.is_null());
 
 	updating_transitions = true;
 
@@ -1580,6 +1630,20 @@ bool AnimationNodeStateMachine::is_transition_across_group(int p_transition) con
 
 int AnimationNodeStateMachine::get_transition_count() const {
 	return transitions.size();
+}
+
+void AnimationNodeStateMachine::remove_multi_transition(const StringName &p_from, const StringName &p_to, int p_idx) {
+	int index = p_idx;
+	for (int i = 0; i < transitions.size(); i++) {
+		if (transitions[i].from == p_from && transitions[i].to == p_to) {
+			if (index <= 0) {
+				remove_transition_by_index(i);
+				return;
+			} else {
+				--index;
+			}
+		}
+	}
 }
 
 void AnimationNodeStateMachine::remove_transition(const StringName &p_from, const StringName &p_to) {
@@ -1825,12 +1889,14 @@ void AnimationNodeStateMachine::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("has_transition", "from", "to"), &AnimationNodeStateMachine::has_transition);
 	ClassDB::bind_method(D_METHOD("add_transition", "from", "to", "transition"), &AnimationNodeStateMachine::add_transition);
+	ClassDB::bind_method(D_METHOD("add_multi_transition", "from", "to", "idx", "transition"), &AnimationNodeStateMachine::add_multi_transition);
 	ClassDB::bind_method(D_METHOD("get_transition", "idx"), &AnimationNodeStateMachine::get_transition);
 	ClassDB::bind_method(D_METHOD("get_transition_from", "idx"), &AnimationNodeStateMachine::get_transition_from);
 	ClassDB::bind_method(D_METHOD("get_transition_to", "idx"), &AnimationNodeStateMachine::get_transition_to);
 	ClassDB::bind_method(D_METHOD("get_transition_count"), &AnimationNodeStateMachine::get_transition_count);
 	ClassDB::bind_method(D_METHOD("remove_transition_by_index", "idx"), &AnimationNodeStateMachine::remove_transition_by_index);
 	ClassDB::bind_method(D_METHOD("remove_transition", "from", "to"), &AnimationNodeStateMachine::remove_transition);
+	ClassDB::bind_method(D_METHOD("remove_multi_transition", "from", "to", "idx"), &AnimationNodeStateMachine::remove_multi_transition);
 
 	ClassDB::bind_method(D_METHOD("set_graph_offset", "offset"), &AnimationNodeStateMachine::set_graph_offset);
 	ClassDB::bind_method(D_METHOD("get_graph_offset"), &AnimationNodeStateMachine::get_graph_offset);

@@ -130,7 +130,7 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	static AnimationNodeStateMachineEditor *singleton;
 
 	void _state_machine_gui_input(const Ref<InputEvent> &p_event);
-	void _connection_draw(const Vector2 &p_from, const Vector2 &p_to, AnimationNodeStateMachineTransition::SwitchMode p_mode, bool p_enabled, bool p_selected, bool p_travel, float p_fade_ratio, bool p_auto_advance, bool p_is_across_group);
+	void _connection_draw(const Vector2 &p_from, const Vector2 &p_to, AnimationNodeStateMachineTransition::SwitchMode p_mode, bool p_enabled, bool p_selected, bool p_travel, float p_fade_ratio, bool p_auto_advance, bool p_is_across_group, bool p_multi_transitions);
 
 	void _state_machine_draw();
 
@@ -202,6 +202,8 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 		float fade_ratio;
 		bool hidden;
 		int transition_index;
+		Vector<TransitionLine> multi_transitions;
+		Ref<AnimationNodeStateMachineTransition> transition;
 		bool is_across_group = false;
 	};
 
@@ -224,6 +226,7 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	StringName selected_transition_from;
 	StringName selected_transition_to;
 	int selected_transition_index = -1;
+	TransitionLine selected_multi_transition;
 	void _add_transition(const bool p_nested_action = false);
 
 	enum HoveredNodeArea {
@@ -252,7 +255,7 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	bool _create_submenu(PopupMenu *p_menu, Ref<AnimationNodeStateMachine> p_nodesm, const StringName &p_name, const StringName &p_path);
 	void _stop_connecting();
 
-	void _delete_selected();
+	void _delete_checked();
 	void _delete_all();
 	void _delete_tree_draw();
 
