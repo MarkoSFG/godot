@@ -94,13 +94,16 @@ Files extracted from upstream source:
 ## clipper2
 
 - Upstream: https://github.com/AngusJohnson/Clipper2
-- Version: 1.2.2 (756c5079aacab5837e812a143c59dc48a09f22e7, 2023)
+- Version: 1.3.0 (98db5662e8dd1808a5a7b50c5605a2289bb390e8, 2023)
 - License: BSL 1.0
 
 Files extracted from upstream source:
 
-- `CPP/Clipper2Lib` folder
+- `CPP/Clipper2Lib/` folder (in root)
 - `LICENSE`
+
+Apply the patches in the `patches/` folder when syncing on newer upstream
+commits.
 
 
 ## cvtt
@@ -459,12 +462,12 @@ Files extracted from upstream source:
 ## libpng
 
 - Upstream: http://libpng.org/pub/png/libpng.html
-- Version: 1.6.40 (f135775ad4e5d4408d2e12ffcc71bb36e6b48551, 2023)
+- Version: 1.6.43 (ed217e3e601d8e462f7fd1e04bed43ac42212429, 2024)
 - License: libpng/zlib
 
 Files extracted from upstream source:
 
-- All `.c` and `.h` files of the main directory, except from `example.c` and
+- All `.c` and `.h` files of the main directory, apart from `example.c` and
   `pngtest.c`
 - `arm/`, `intel/` and `powerpc/` folders
 - `scripts/pnglibconf.h.prebuilt` as `pnglibconf.h`
@@ -858,13 +861,13 @@ instead of `miniz.h` as an external dependency.
 ## thorvg
 
 - Upstream: https://github.com/thorvg/thorvg
-- Version: 0.12.5 (9c8eeaab9629b5d241b1092a3398fe6351c259cd, 2024)
+- Version: 0.12.7 (cddae9966cbb48c431ea17c262d6f48393206fd7, 2024)
 - License: MIT
 
 Files extracted from upstream source:
 
 See `thorvg/update-thorvg.sh` for extraction instructions. Set the version
-number and run the script and apply patches from the `patches` folder.
+number and run the script.
 
 
 ## ufbx

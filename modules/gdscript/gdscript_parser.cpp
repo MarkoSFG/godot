@@ -121,6 +121,7 @@ GDScriptParser::GDScriptParser() {
 		register_annotation(MethodInfo("@export_flags_3d_physics"), AnnotationInfo::VARIABLE, &GDScriptParser::export_annotations<PROPERTY_HINT_LAYERS_3D_PHYSICS, Variant::INT>);
 		register_annotation(MethodInfo("@export_flags_3d_navigation"), AnnotationInfo::VARIABLE, &GDScriptParser::export_annotations<PROPERTY_HINT_LAYERS_3D_NAVIGATION, Variant::INT>);
 		register_annotation(MethodInfo("@export_flags_avoidance"), AnnotationInfo::VARIABLE, &GDScriptParser::export_annotations<PROPERTY_HINT_LAYERS_AVOIDANCE, Variant::INT>);
+		register_annotation(MethodInfo("@export_custom", PropertyInfo(Variant::INT, "hint", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_CLASS_IS_ENUM, "PropertyHint"), PropertyInfo(Variant::STRING, "hint_string"), PropertyInfo(Variant::INT, "usage", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_CLASS_IS_BITFIELD, "PropertyUsageFlags")), AnnotationInfo::VARIABLE, &GDScriptParser::export_custom_annotation, varray(PROPERTY_USAGE_DEFAULT));
 		// Export grouping annotations.
 		register_annotation(MethodInfo("@export_category", PropertyInfo(Variant::STRING, "name")), AnnotationInfo::STANDALONE, &GDScriptParser::export_group_annotations<PROPERTY_USAGE_CATEGORY>);
 		register_annotation(MethodInfo("@export_group", PropertyInfo(Variant::STRING, "name"), PropertyInfo(Variant::STRING, "prefix")), AnnotationInfo::STANDALONE, &GDScriptParser::export_group_annotations<PROPERTY_USAGE_GROUP>, varray(""));
@@ -3459,6 +3460,7 @@ enum DocLineState {
 	DOC_LINE_NORMAL,
 	DOC_LINE_IN_CODE,
 	DOC_LINE_IN_CODEBLOCK,
+	DOC_LINE_IN_KBD,
 };
 
 static String _process_doc_line(const String &p_line, const String &p_text, const String &p_space_prefix, DocLineState &r_state) {
@@ -3504,21 +3506,23 @@ static String _process_doc_line(const String &p_line, const String &p_text, cons
 				from = rb_pos + 1;
 
 				String tag = line.substr(lb_pos + 1, rb_pos - lb_pos - 1);
-				if (tag == "code") {
+				if (tag == "code" || tag.begins_with("code ")) {
 					r_state = DOC_LINE_IN_CODE;
-				} else if (tag == "codeblock") {
+				} else if (tag == "codeblock" || tag.begins_with("codeblock ")) {
 					if (lb_pos == 0) {
 						line_join = "\n";
 					} else {
 						result += line.substr(buffer_start, lb_pos - buffer_start) + '\n';
 					}
-					result += "[codeblock]";
+					result += "[" + tag + "]";
 					if (from < len) {
 						result += '\n';
 					}
 
 					r_state = DOC_LINE_IN_CODEBLOCK;
 					buffer_start = from;
+				} else if (tag == "kbd") {
+					r_state = DOC_LINE_IN_KBD;
 				}
 			} break;
 			case DOC_LINE_IN_CODE: {
@@ -3528,7 +3532,7 @@ static String _process_doc_line(const String &p_line, const String &p_text, cons
 					break;
 				}
 
-				from = pos + 7;
+				from = pos + 7; // `len("[/code]")`.
 
 				r_state = DOC_LINE_NORMAL;
 			} break;
@@ -3539,7 +3543,7 @@ static String _process_doc_line(const String &p_line, const String &p_text, cons
 					break;
 				}
 
-				from = pos + 12;
+				from = pos + 12; // `len("[/codeblock]")`.
 
 				if (pos == 0) {
 					line_join = "\n";
@@ -3553,6 +3557,17 @@ static String _process_doc_line(const String &p_line, const String &p_text, cons
 
 				r_state = DOC_LINE_NORMAL;
 				buffer_start = from;
+			} break;
+			case DOC_LINE_IN_KBD: {
+				int pos = line.find("[/kbd]", from);
+				if (pos < 0) {
+					process = false;
+					break;
+				}
+
+				from = pos + 6; // `len("[/kbd]")`.
+
+				r_state = DOC_LINE_NORMAL;
 			} break;
 		}
 	}
@@ -4325,6 +4340,30 @@ bool GDScriptParser::export_annotations(const AnnotationNode *p_annotation, Node
 		variable->export_info.type = original_export_type_builtin;
 	}
 
+	return true;
+}
+
+bool GDScriptParser::export_custom_annotation(const AnnotationNode *p_annotation, Node *p_node, ClassNode *p_class) {
+	ERR_FAIL_COND_V_MSG(p_node->type != Node::VARIABLE, false, vformat(R"("%s" annotation can only be applied to variables.)", p_annotation->name));
+	ERR_FAIL_COND_V_MSG(p_annotation->resolved_arguments.size() < 2, false, R"(Annotation "@export_custom" requires 2 arguments.)");
+
+	VariableNode *variable = static_cast<VariableNode *>(p_node);
+	if (variable->exported) {
+		push_error(vformat(R"(Annotation "%s" cannot be used with another "@export" annotation.)", p_annotation->name), p_annotation);
+		return false;
+	}
+
+	variable->exported = true;
+
+	DataType export_type = variable->get_datatype();
+
+	variable->export_info.type = export_type.builtin_type;
+	variable->export_info.hint = static_cast<PropertyHint>(p_annotation->resolved_arguments[0].operator int64_t());
+	variable->export_info.hint_string = p_annotation->resolved_arguments[1];
+
+	if (p_annotation->resolved_arguments.size() >= 3) {
+		variable->export_info.usage = p_annotation->resolved_arguments[2].operator int64_t();
+	}
 	return true;
 }
 
