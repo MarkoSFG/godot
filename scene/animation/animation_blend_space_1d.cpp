@@ -343,7 +343,7 @@ double AnimationNodeBlendSpace1D::_process(const AnimationMixer::PlaybackInfo p_
 		// actually blend the animations now
 
 		for (int i = 0; i < blend_points_used; i++) {
-			if (i == point_lower || i == point_higher) {
+			if ((i == point_lower || i == point_higher) && weights[i] > 0.0f) {
 				pi.weight = weights[i];
 				double remaining = blend_node(blend_points[i].node, blend_points[i].name, pi, FILTER_IGNORE, true, p_test_only);
 				max_time_remaining = MAX(max_time_remaining, remaining);

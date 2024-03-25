@@ -47,6 +47,11 @@ class AnimationNode : public Resource {
 public:
 	friend class AnimationTree;
 
+	enum ParamMode {
+		VALUE,
+		PARAMETER,
+	};
+
 	enum FilterAction {
 		FILTER_IGNORE,
 		FILTER_PASS,
@@ -121,6 +126,7 @@ public:
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const;
 	virtual bool is_parameter_read_only(const StringName &p_parameter) const;
 
+	//virtual void shared_parameter_renamed(AnimationTree *p_tree, const String &p_old_name, const String &p_name);
 	void set_parameter(const StringName &p_name, const Variant &p_value);
 	Variant get_parameter(const StringName &p_name) const;
 
@@ -207,6 +213,7 @@ private:
 	HashMap<StringName, HashMap<StringName, StringName>> property_parent_map;
 	HashMap<ObjectID, StringName> property_reference_map;
 	HashMap<StringName, Pair<Variant, bool>> property_map; // Property value and read-only flag.
+	HashMap<StringName, Variant> shared_property_map; // shared parameters
 
 	bool properties_dirty = true;
 
@@ -261,6 +268,13 @@ public:
 	void set_advance_expression_base_node(const NodePath &p_path);
 	NodePath get_advance_expression_base_node() const;
 
+	void set_shared_parameter(const StringName &p_name, const Variant &p_value);
+	Variant get_shared_parameter(const StringName &p_name) const;
+	bool has_shared_parameter(const StringName &p_name) const;
+	void remove_shared_parameter(const String &p_name);
+	void set_shared_parameters(const Dictionary &p_data);
+	Dictionary get_shared_parameters() const;
+
 	PackedStringArray get_configuration_warnings() const override;
 
 	bool is_state_invalid() const;
@@ -269,6 +283,8 @@ public:
 	real_t get_connection_activity(const StringName &p_path, int p_connection) const;
 
 	uint64_t get_last_process_pass() const;
+
+	void rename_shared_parameter(const String &p_old_text, const String &p_text);
 
 	AnimationTree();
 	~AnimationTree();

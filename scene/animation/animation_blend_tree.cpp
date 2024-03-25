@@ -628,20 +628,46 @@ AnimationNodeAdd3::AnimationNodeAdd3() {
 
 /////////////////////////////////////////////
 
+void AnimationNodeBlend2::set_param_mode(ParamMode p_param_mode) {
+	param_mode = p_param_mode;
+}
+
+AnimationNode::ParamMode AnimationNodeBlend2::get_param_mode() const {
+	return param_mode;
+}
+
 void AnimationNodeBlend2::get_parameter_list(List<PropertyInfo> *r_list) const {
 	r_list->push_back(PropertyInfo(Variant::FLOAT, blend_amount, PROPERTY_HINT_RANGE, "0,1,0.01,or_less,or_greater"));
+	r_list->push_back(PropertyInfo(Variant::STRING, "parameter", PROPERTY_HINT_NONE));
 }
 
 Variant AnimationNodeBlend2::get_parameter_default_value(const StringName &p_parameter) const {
-	return 0; // For blend amount.
+	if (p_parameter == "blend_amount") {
+		return 0;
+	} else {
+		return "";
+	}
 }
+
+//void AnimationNodeBlend2::shared_parameter_renamed(AnimationTree *p_tree, const String &p_old_name, const String &p_name) {
+//	AnimationNode::shared_parameter_renamed(p_tree, p_old_name, p_name);
+//	if (p_tree->get_parameter(node_state.base_path, "parameter") == p_old_name) {
+//		p_tree->set_parameter(node_state.base_path, "parameter", p_name);
+//	}
+//}
 
 String AnimationNodeBlend2::get_caption() const {
 	return "Blend2";
 }
 
 double AnimationNodeBlend2::_process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only) {
-	double amount = get_parameter(blend_amount);
+	double amount;
+	if (param_mode == VALUE) {
+		amount = get_parameter(blend_amount);
+	} else {
+		String param = get_parameter("parameter");
+		amount = param.is_empty() ? get_parameter(blend_amount): get_animation_tree()->get_shared_parameter(param);
+	}
 
 	AnimationMixer::PlaybackInfo pi = p_playback_info;
 	pi.weight = 1.0 - amount;
@@ -657,6 +683,10 @@ bool AnimationNodeBlend2::has_filter() const {
 }
 
 void AnimationNodeBlend2::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_param_mode", "param_mode"), &AnimationNodeBlend2::set_param_mode);
+	ClassDB::bind_method(D_METHOD("get_param_mode"), &AnimationNodeBlend2::get_param_mode);
+
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "param_mode", PROPERTY_HINT_ENUM, "Value,Parameter"), "set_param_mode", "get_param_mode");
 }
 
 AnimationNodeBlend2::AnimationNodeBlend2() {
@@ -666,20 +696,46 @@ AnimationNodeBlend2::AnimationNodeBlend2() {
 
 //////////////////////////////////////
 
+void AnimationNodeBlend3::set_param_mode(ParamMode p_param_mode) {
+	param_mode = p_param_mode;
+}
+
+AnimationNode::ParamMode AnimationNodeBlend3::get_param_mode() const {
+	return param_mode;
+}
+
 void AnimationNodeBlend3::get_parameter_list(List<PropertyInfo> *r_list) const {
 	r_list->push_back(PropertyInfo(Variant::FLOAT, blend_amount, PROPERTY_HINT_RANGE, "-1,1,0.01,or_less,or_greater"));
+	r_list->push_back(PropertyInfo(Variant::STRING, "parameter", PROPERTY_HINT_NONE));
 }
 
 Variant AnimationNodeBlend3::get_parameter_default_value(const StringName &p_parameter) const {
-	return 0; // For blend amount.
+	if (p_parameter == "blend_amount") {
+		return 0;
+	} else {
+		return "";
+	}
 }
+
+//void AnimationNodeBlend3::shared_parameter_renamed(AnimationTree *p_tree, const String &p_old_name, const String &p_name) {
+//	AnimationNode::shared_parameter_renamed(p_tree, p_old_name, p_name);
+//	if (p_tree->get_parameter(node_state.base_path, "parameter") == p_old_name) {
+//		p_tree->set_parameter(node_state.base_path, "parameter", p_name);
+//	}
+//}
 
 String AnimationNodeBlend3::get_caption() const {
 	return "Blend3";
 }
 
 double AnimationNodeBlend3::_process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only) {
-	double amount = get_parameter(blend_amount);
+	double amount;
+	if (param_mode == VALUE) {
+		amount = get_parameter(blend_amount);
+	} else {
+		String param = get_parameter("parameter");
+		amount = param.is_empty() ? get_parameter(blend_amount) : get_animation_tree()->get_shared_parameter(param);
+	}
 
 	AnimationMixer::PlaybackInfo pi = p_playback_info;
 	pi.weight = MAX(0, -amount);
@@ -693,6 +749,10 @@ double AnimationNodeBlend3::_process(const AnimationMixer::PlaybackInfo p_playba
 }
 
 void AnimationNodeBlend3::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_param_mode", "param_mode"), &AnimationNodeBlend3::set_param_mode);
+	ClassDB::bind_method(D_METHOD("get_param_mode"), &AnimationNodeBlend3::get_param_mode);
+
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "param_mode", PROPERTY_HINT_ENUM, "Value,Parameter"), "set_param_mode", "get_param_mode");
 }
 
 AnimationNodeBlend3::AnimationNodeBlend3() {

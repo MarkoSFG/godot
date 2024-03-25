@@ -33,6 +33,22 @@
 #include "animation_blend_tree.h"
 #include "core/math/geometry_2d.h"
 
+void AnimationNodeBlendSpace2D::set_param_mode(ParamMode p_param_mode) {
+	param_mode = p_param_mode;
+}
+
+AnimationNode::ParamMode AnimationNodeBlendSpace2D::get_param_mode() const {
+	return param_mode;
+}
+
+void AnimationNodeBlendSpace2D::set_blend_param(const String &p_blend_param) {
+	blend_param = p_blend_param;
+}
+
+String AnimationNodeBlendSpace2D::get_blend_param() const {
+	return blend_param;
+}
+
 void AnimationNodeBlendSpace2D::get_parameter_list(List<PropertyInfo> *r_list) const {
 	r_list->push_back(PropertyInfo(Variant::VECTOR2, blend_position));
 	r_list->push_back(PropertyInfo(Variant::INT, closest, PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE));
@@ -40,7 +56,9 @@ void AnimationNodeBlendSpace2D::get_parameter_list(List<PropertyInfo> *r_list) c
 }
 
 Variant AnimationNodeBlendSpace2D::get_parameter_default_value(const StringName &p_parameter) const {
-	if (p_parameter == closest) {
+	if (p_parameter == "blend_param") {
+		return "";
+	} else if (p_parameter == closest) {
 		return -1;
 	} else if (p_parameter == length_internal) {
 		return 0;
@@ -445,7 +463,13 @@ void AnimationNodeBlendSpace2D::_blend_triangle(const Vector2 &p_pos, const Vect
 double AnimationNodeBlendSpace2D::_process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only) {
 	_update_triangles();
 
-	Vector2 blend_pos = get_parameter(blend_position);
+	Vector2 blend_pos;
+	if (param_mode == VALUE) {
+		blend_pos = get_parameter(blend_position);
+	} else {
+		blend_pos = blend_param.is_empty() ? get_parameter(blend_position) : get_animation_tree()->get_shared_parameter(blend_param);
+	}
+
 	int cur_closest = get_parameter(closest);
 	double cur_length_internal = get_parameter(length_internal);
 	double mind = 0.0; //time of min distance point
@@ -512,7 +536,7 @@ double AnimationNodeBlendSpace2D::_process(const AnimationMixer::PlaybackInfo p_
 		for (int i = 0; i < blend_points_used; i++) {
 			bool found = false;
 			for (int j = 0; j < 3; j++) {
-				if (i == triangle_points[j]) {
+				if (i == triangle_points[j] && blend_weights[j] > 0.0f) {
 					//blend with the given weight
 					pi.weight = blend_weights[j];
 					double t = blend_node(blend_points[i].node, blend_points[i].name, pi, FILTER_IGNORE, true, p_test_only);
@@ -689,6 +713,14 @@ void AnimationNodeBlendSpace2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_use_sync", "enable"), &AnimationNodeBlendSpace2D::set_use_sync);
 	ClassDB::bind_method(D_METHOD("is_using_sync"), &AnimationNodeBlendSpace2D::is_using_sync);
 
+	ClassDB::bind_method(D_METHOD("set_param_mode", "param_mode"), &AnimationNodeBlendSpace2D::set_param_mode);
+	ClassDB::bind_method(D_METHOD("get_param_mode"), &AnimationNodeBlendSpace2D::get_param_mode);
+
+	ClassDB::bind_method(D_METHOD("set_blend_param", "blend_param"), &AnimationNodeBlendSpace2D::set_blend_param);
+	ClassDB::bind_method(D_METHOD("get_blend_param"), &AnimationNodeBlendSpace2D::get_blend_param);
+
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "param_mode", PROPERTY_HINT_ENUM, "Value,Parameter"), "set_param_mode", "get_param_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "blend_param", PROPERTY_HINT_NONE), "set_blend_param", "get_blend_param");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_triangles", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR), "set_auto_triangles", "get_auto_triangles");
 
 	for (int i = 0; i < MAX_BLEND_POINTS; i++) {

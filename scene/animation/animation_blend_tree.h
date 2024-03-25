@@ -76,6 +76,7 @@ private:
 };
 
 VARIANT_ENUM_CAST(AnimationNodeAnimation::PlayMode)
+VARIANT_ENUM_CAST(AnimationNode::ParamMode)
 
 class AnimationNodeSync : public AnimationNode {
 	GDCLASS(AnimationNodeSync, AnimationNode);
@@ -213,14 +214,19 @@ class AnimationNodeBlend2 : public AnimationNodeSync {
 	GDCLASS(AnimationNodeBlend2, AnimationNodeSync);
 
 	StringName blend_amount = PNAME("blend_amount");
+	ParamMode param_mode = VALUE;
 
 protected:
 	static void _bind_methods();
 
 public:
+	void set_param_mode(ParamMode p_param_mode);
+	ParamMode get_param_mode() const;
+
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
 
+	//virtual void shared_parameter_renamed(AnimationTree *p_tree, const String &p_old_name, const String &p_name) override;
 	virtual String get_caption() const override;
 	virtual double _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
@@ -232,14 +238,19 @@ class AnimationNodeBlend3 : public AnimationNodeSync {
 	GDCLASS(AnimationNodeBlend3, AnimationNodeSync);
 
 	StringName blend_amount = PNAME("blend_amount");
+	ParamMode param_mode = VALUE;
 
 protected:
 	static void _bind_methods();
 
 public:
+	void set_param_mode(ParamMode p_param_mode);
+	ParamMode get_param_mode() const;
+
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
 
+	//virtual void shared_parameter_renamed(AnimationTree *p_tree, const String &p_old_name, const String &p_name) override;
 	virtual String get_caption() const override;
 
 	virtual double _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;

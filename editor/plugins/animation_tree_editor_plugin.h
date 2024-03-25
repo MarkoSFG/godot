@@ -34,6 +34,8 @@
 #include "editor/editor_plugin.h"
 #include "scene/animation/animation_tree.h"
 #include "scene/gui/graph_edit.h"
+#include "scene/gui/tree.h"
+#include "scene/gui/dialogs.h"
 
 class Button;
 class EditorFileDialog;
@@ -50,11 +52,21 @@ public:
 class AnimationTreeEditor : public VBoxContainer {
 	GDCLASS(AnimationTreeEditor, VBoxContainer);
 
+	enum {
+		PARAM_BUTTON_DELETE,
+	};
+
+	HBoxContainer *top_hb = nullptr;
 	ScrollContainer *path_edit = nullptr;
 	HBoxContainer *path_hb = nullptr;
 
 	AnimationTree *tree = nullptr;
 	MarginContainer *editor_base = nullptr;
+
+	Button *btn_parameters = nullptr;
+	AcceptDialog *parameters_window = nullptr;
+	Tree *parameters_tree = nullptr;
+	LineEdit *add_parameter_name = nullptr;
 
 	Vector<String> button_path;
 	Vector<String> edited_path;
@@ -84,6 +96,15 @@ public:
 	String get_base_path();
 
 	bool can_edit(const Ref<AnimationNode> &p_node) const;
+
+	void _add_shared_parameter();
+	void _open_shared_parameters();
+	void _parameter_item_edited();
+	void _parameter_button_pressed(TreeItem *p_item, int p_column, int p_id, MouseButton p_button);
+	void _parameter_renamed();
+	void _parameter_value_modified();
+
+	void _update_editor(AnimationTree *p_tree);
 
 	void edit_path(const Vector<String> &p_path);
 	Vector<String> get_edited_path() const;

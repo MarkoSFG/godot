@@ -123,6 +123,10 @@ bool CanvasItem::is_visible() const {
 	return visible;
 }
 
+bool CanvasItem::is_visible_unsafe() const {
+	return visible;
+}
+
 CanvasItem *CanvasItem::current_item_drawn = nullptr;
 CanvasItem *CanvasItem::get_current_item_drawn() {
 	return current_item_drawn;

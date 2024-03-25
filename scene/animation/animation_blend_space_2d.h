@@ -72,6 +72,8 @@ protected:
 	String x_label = "x";
 	String y_label = "y";
 	BlendMode blend_mode = BLEND_MODE_INTERPOLATED;
+	AnimationNode::ParamMode param_mode = VALUE;
+	String blend_param = "";
 
 	void _add_blend_point(int p_index, const Ref<AnimationRootNode> &p_node);
 	void _set_triangles(const Vector<int> &p_triangles);
@@ -95,6 +97,12 @@ protected:
 	virtual void _animation_node_removed(const ObjectID &p_oid, const StringName &p_node) override;
 
 public:
+	void set_param_mode(ParamMode p_param_mode);
+	ParamMode get_param_mode() const;
+
+	void set_blend_param(const String &p_blend_param);
+	String get_blend_param() const;
+
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
 

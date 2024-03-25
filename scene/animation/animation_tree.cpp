@@ -60,6 +60,15 @@ bool AnimationNode::is_parameter_read_only(const StringName &p_parameter) const 
 	return ret;
 }
 
+//void AnimationNode::shared_parameter_renamed(AnimationTree *p_tree, const String& p_old_name, const String& p_name) {
+//	List<AnimationNode::ChildNode> children;
+//	get_child_nodes(&children);
+//
+//	for (const AnimationNode::ChildNode &E : children) {
+//		E.node->shared_parameter_renamed(p_tree, p_old_name, p_name);
+//	}
+//}
+
 void AnimationNode::set_parameter(const StringName &p_name, const Variant &p_value) {
 	ERR_FAIL_NULL(process_state);
 	if (process_state->is_testing) {
@@ -597,6 +606,40 @@ NodePath AnimationTree::get_advance_expression_base_node() const {
 	return advance_expression_base_node;
 }
 
+void AnimationTree::set_shared_parameter(const StringName &p_name, const Variant &p_value) {
+	shared_property_map[p_name] = p_value;
+}
+
+Variant AnimationTree::get_shared_parameter(const StringName &p_name) const {
+	ERR_FAIL_COND_V(!shared_property_map.has(p_name), Variant());
+	return shared_property_map[p_name];
+}
+
+bool AnimationTree::has_shared_parameter(const StringName &p_name) const {
+	return shared_property_map.has(p_name);
+}
+
+void AnimationTree::remove_shared_parameter(const String &p_name) {
+	shared_property_map.remove(shared_property_map.find(p_name));
+}
+
+void AnimationTree::set_shared_parameters(const Dictionary &p_data) {
+	shared_property_map.clear();
+	List<Variant> keys;
+	p_data.get_key_list(&keys);
+	for (const Variant &K : keys) {
+		shared_property_map[K] = p_data[K];
+	}
+}
+
+Dictionary AnimationTree::get_shared_parameters() const {
+	Dictionary ret;
+	for (const KeyValue<StringName, Variant> &K : shared_property_map) {
+		ret[K.key] = K.value;
+	}
+	return ret;
+}
+
 bool AnimationTree::is_state_invalid() const {
 	return !process_state.valid;
 }
@@ -607,6 +650,18 @@ String AnimationTree::get_invalid_state_reason() const {
 
 uint64_t AnimationTree::get_last_process_pass() const {
 	return process_pass;
+}
+
+void AnimationTree::rename_shared_parameter(const String& p_old_text, const String& p_text) {
+	Variant param_value = shared_property_map[p_old_text];
+	shared_property_map.remove(shared_property_map.find(p_old_text));
+	shared_property_map[p_text] = param_value;
+
+	// Edit: nope, don't bother - way too convoluted / complicated to achieve this in the current data architecture
+	// traverse tree and call every node's shared_parameter_renamed method (as it should then update blend_amount_parameter on relevant nodes)
+	/*if (root_animation_node.is_valid()) {
+		root_animation_node->shared_parameter_renamed(this, p_old_text, p_text);
+	}*/
 }
 
 PackedStringArray AnimationTree::get_configuration_warnings() const {
@@ -889,9 +944,18 @@ void AnimationTree::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_animation_player", "path"), &AnimationTree::set_animation_player);
 	ClassDB::bind_method(D_METHOD("get_animation_player"), &AnimationTree::get_animation_player);
 
+	ClassDB::bind_method(D_METHOD("set_shared_parameter", "name", "value"), &AnimationTree::set_shared_parameter);
+	ClassDB::bind_method(D_METHOD("get_shared_parameter", "name"), &AnimationTree::get_shared_parameter);
+
+	ClassDB::bind_method(D_METHOD("set_shared_parameters", "data"), &AnimationTree::set_shared_parameters);
+	ClassDB::bind_method(D_METHOD("get_shared_parameters"), &AnimationTree::get_shared_parameters);
+
+	ClassDB::bind_method(D_METHOD("rename_shared_parameter", "old_text", "text"), &AnimationTree::rename_shared_parameter);
+
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "tree_root", PROPERTY_HINT_RESOURCE_TYPE, "AnimationRootNode"), "set_tree_root", "get_tree_root");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "advance_expression_base_node", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node"), "set_advance_expression_base_node", "get_advance_expression_base_node");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "anim_player", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "AnimationPlayer"), "set_animation_player", "get_animation_player");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "shared_parameters", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_shared_parameters", "get_shared_parameters");
 
 #ifdef TOOLS_ENABLED
 	ADD_SIGNAL(MethodInfo(SNAME("animation_player_changed")));
