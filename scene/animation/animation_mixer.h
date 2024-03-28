@@ -115,7 +115,7 @@ protected:
 
 	// For caches.
 	uint64_t animation_set_update_pass = 1;
-	void _animation_set_cache_update();
+	void _animation_set_cache_update(bool animation_list_changed = true);
 
 	// Signals.
 	virtual void _animation_added(const StringName &p_name, const StringName &p_library);
@@ -300,7 +300,7 @@ protected:
 	Vector<Node *> playing_audio_stream_players;
 
 	// Helpers.
-	void _clear_caches();
+	void _clear_caches(bool p_emit_signal = true);
 	void _clear_audio_streams();
 	void _clear_playing_caches();
 	void _init_root_motion_cache();
@@ -389,8 +389,8 @@ public:
 	Ref<AnimationLibrary> get_animation_library(const StringName &p_name) const;
 	bool has_animation_library(const StringName &p_name) const;
 	StringName find_animation_library(const Ref<Animation> &p_animation) const;
-	Error add_animation_library(const StringName &p_name, const Ref<AnimationLibrary> &p_animation_library);
-	void remove_animation_library(const StringName &p_name);
+	Error add_animation_library(const StringName &p_name, const Ref<AnimationLibrary> &p_animation_library, bool emit_list_changed = true);
+	void remove_animation_library(const StringName &p_name, bool emit_list_changed = true);
 	void rename_animation_library(const StringName &p_name, const StringName &p_new_name);
 
 	void get_animation_list(List<StringName> *p_animations) const;
@@ -405,7 +405,7 @@ public:
 	void set_deterministic(bool p_deterministic);
 	bool is_deterministic() const;
 
-	void set_root_node(const NodePath &p_path);
+	void set_root_node(const NodePath &p_path, bool emit_signal = true);
 	NodePath get_root_node() const;
 
 	void set_callback_mode_process(AnimationCallbackModeProcess p_mode);
@@ -436,7 +436,7 @@ public:
 	void make_animation_instance(const StringName &p_name, const PlaybackInfo p_playback_info);
 	void clear_animation_instances();
 	virtual void advance(double p_time);
-	virtual void clear_caches(); ///< must be called by hand if an animation was modified after added
+	virtual void clear_caches(bool p_emit_signal = true); ///< must be called by hand if an animation was modified after added
 
 	/* ---- Capture feature ---- */
 	void capture(const StringName &p_name, double p_duration, Tween::TransitionType p_trans_type = Tween::TRANS_LINEAR, Tween::EaseType p_ease_type = Tween::EASE_IN);

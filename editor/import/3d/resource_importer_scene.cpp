@@ -980,7 +980,7 @@ Node *ResourceImporterScene::_pre_fix_animations(Node *p_node, Node *p_root, con
 	return p_node;
 }
 
-Node *ResourceImporterScene::_post_fix_animations(Node *p_node, Node *p_root, const Dictionary &p_node_data, const Dictionary &p_animation_data, float p_animation_fps) {
+Node *ResourceImporterScene::_post_fix_animations(Node *p_node, Node *p_root, const Dictionary &p_node_data, Dictionary &p_animation_data, float p_animation_fps) {
 	// children first
 	for (int i = 0; i < p_node->get_child_count(); i++) {
 		Node *r = _post_fix_animations(p_node->get_child(i), p_root, p_node_data, p_animation_data, p_animation_fps);
@@ -1030,16 +1030,28 @@ Node *ResourceImporterScene::_post_fix_animations(Node *p_node, Node *p_root, co
 
 		List<StringName> anims;
 		ap->get_animation_list(&anims);
+
+		String anim_library_path;
+		bool is_bulk_import = false;
+		// apply bulk import settings to first animation found
+		if (p_animation_data.has("_bulk_import") && anims.size() > 0) {
+			Dictionary bulk_data = p_animation_data["_bulk_import"];
+			anim_library_path = bulk_data["anim_library_path"];
+			bulk_data.erase("anim_library_path");
+			p_animation_data[anims[0]] = bulk_data;
+			p_animation_data.erase("_bulk_import");
+			is_bulk_import = true;
+		}
+
 		for (const StringName &name : anims) {
 			Ref<Animation> anim = ap->get_animation(name);
 			Array animation_slices;
-
+			
 			if (p_animation_data.has(name)) {
 				Dictionary anim_settings = p_animation_data[name];
+				int slices_count = anim_settings["slices/amount"];
 
 				{
-					int slices_count = anim_settings["slices/amount"];
-
 					for (int i = 0; i < slices_count; i++) {
 						String slice_name = anim_settings["slice_" + itos(i + 1) + "/name"];
 						int from_frame = anim_settings["slice_" + itos(i + 1) + "/start_frame"];
@@ -1059,7 +1071,8 @@ Node *ResourceImporterScene::_post_fix_animations(Node *p_node, Node *p_root, co
 					}
 
 					if (animation_slices.size() > 0) {
-						_create_slices(ap, anim, animation_slices, true);
+						// this method creates animations which should also be added to bulk import library
+						_create_slices(ap, anim, animation_slices, true, is_bulk_import, anim_library_path);
 					}
 				}
 				{
@@ -1067,8 +1080,10 @@ Node *ResourceImporterScene::_post_fix_animations(Node *p_node, Node *p_root, co
 					List<ImportOption> iopts;
 					get_internal_import_options(INTERNAL_IMPORT_CATEGORY_ANIMATION, &iopts);
 					for (const ImportOption &F : iopts) {
-						if (!anim_settings.has(F.option.name)) {
-							anim_settings[F.option.name] = F.default_value;
+						if (!F.option.name.contains("slice_")) {
+							if (!anim_settings.has(F.option.name)) {
+								anim_settings[F.option.name] = F.default_value;
+							}
 						}
 					}
 				}
@@ -1084,11 +1099,39 @@ Node *ResourceImporterScene::_post_fix_animations(Node *p_node, Node *p_root, co
 					Ref<AnimationLibrary> al = ap->get_animation_library(ap->find_animation_library(anim));
 					al->add_animation(name, saved_anim); //replace
 				}
+
+				if (is_bulk_import && slices_count == 0) {
+					int name_start = path.rfind("/") + 1;
+					_add_anim_to_library(saved_anim, path.substr(name_start, path.find(".") - name_start), anim_library_path);
+				}
 			}
 		}
 	}
 
 	return p_node;
+}
+
+void ResourceImporterScene::_add_anim_to_library(Ref<Animation> p_anim, const String &p_name, const String &p_library_path) {
+	{
+		int flags = 0;
+		if (EDITOR_GET("filesystem/on_save/compress_binary_resources")) {
+			flags |= ResourceSaver::FLAG_COMPRESS;
+		}
+
+		Ref<AnimationLibrary> library = ResourceLoader::load(p_library_path);
+		ERR_FAIL_COND_MSG(library.is_null(), "Could not find animation library at '" + p_library_path + "'.");
+
+		if (!library.is_valid()) {
+			library.instantiate(); // Will be empty
+		}
+
+		if (!library->has_animation(p_name)) {
+			library->add_animation(p_name, p_anim);
+
+			int err = ResourceSaver::save(library, p_library_path, flags); //do not take over, let the changed files reload themselves
+			ERR_FAIL_COND_MSG(err != OK, "Cannot save animation to file '" + p_library_path + "'.");
+		}
+	}
 }
 
 Node *ResourceImporterScene::_post_fix_node(Node *p_node, Node *p_root, HashMap<Ref<ImporterMesh>, Vector<Ref<Shape3D>>> &collision_map, Pair<PackedVector3Array, PackedInt32Array> &r_occluder_arrays, HashSet<Ref<ImporterMesh>> &r_scanned_meshes, const Dictionary &p_node_data, const Dictionary &p_material_data, const Dictionary &p_animation_data, float p_animation_fps, float p_applied_root_scale) {
@@ -1429,8 +1472,10 @@ Node *ResourceImporterScene::_post_fix_node(Node *p_node, Node *p_root, HashMap<
 						List<ImportOption> iopts;
 						get_internal_import_options(INTERNAL_IMPORT_CATEGORY_ANIMATION, &iopts);
 						for (const ImportOption &F : iopts) {
-							if (!anim_settings.has(F.option.name)) {
-								anim_settings[F.option.name] = F.default_value;
+							if (!F.option.name.contains("slice_")) {
+								if (!anim_settings.has(F.option.name)) {
+									anim_settings[F.option.name] = F.default_value;
+								}
 							}
 						}
 					}
@@ -1477,7 +1522,7 @@ Ref<Animation> ResourceImporterScene::_save_animation_to_file(Ref<Animation> ani
 	return anim;
 }
 
-void ResourceImporterScene::_create_slices(AnimationPlayer *ap, Ref<Animation> anim, const Array &p_slices, bool p_bake_all) {
+void ResourceImporterScene::_create_slices(AnimationPlayer *ap, Ref<Animation> anim, const Array &p_slices, bool p_bake_all, bool p_bulk_import, const String &p_bulk_import_path) {
 	Ref<AnimationLibrary> al = ap->get_animation_library(ap->find_animation_library(anim));
 
 	for (int i = 0; i < p_slices.size(); i += 7) {
@@ -1624,6 +1669,10 @@ void ResourceImporterScene::_create_slices(AnimationPlayer *ap, Ref<Animation> a
 		Ref<Animation> saved_anim = _save_animation_to_file(new_anim, save_to_file, save_to_path, keep_current);
 		if (saved_anim != new_anim) {
 			al->add_animation(name, saved_anim);
+		}
+		if (p_bulk_import) {
+			int name_start = save_to_path.rfind("/") + 1;
+			_add_anim_to_library(saved_anim, save_to_path.substr(name_start, save_to_path.find(".") - name_start), p_bulk_import_path);
 		}
 	}
 

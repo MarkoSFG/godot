@@ -127,7 +127,7 @@ void AnimationMixer::_validate_property(PropertyInfo &p_property) const {
 /* -- Data lists ------------------------------ */
 /* -------------------------------------------- */
 
-void AnimationMixer::_animation_set_cache_update() {
+void AnimationMixer::_animation_set_cache_update(bool animation_list_changed) {
 	// Relatively fast function to update all animations.
 	animation_set_update_pass++;
 	bool clear_cache_needed = false;
@@ -180,7 +180,9 @@ void AnimationMixer::_animation_set_cache_update() {
 		_clear_caches();
 	}
 
-	emit_signal(SNAME("animation_list_changed"));
+	if (animation_list_changed) {
+		emit_signal(SNAME("animation_list_changed"));
+	}
 }
 
 void AnimationMixer::_animation_added(const StringName &p_name, const StringName &p_library) {
@@ -269,7 +271,7 @@ StringName AnimationMixer::find_animation_library(const Ref<Animation> &p_animat
 	return StringName();
 }
 
-Error AnimationMixer::add_animation_library(const StringName &p_name, const Ref<AnimationLibrary> &p_animation_library) {
+Error AnimationMixer::add_animation_library(const StringName &p_name, const Ref<AnimationLibrary> &p_animation_library, bool emit_list_changed) {
 	ERR_FAIL_COND_V(p_animation_library.is_null(), ERR_INVALID_PARAMETER);
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_V_MSG(String(p_name).contains("/") || String(p_name).contains(":") || String(p_name).contains(",") || String(p_name).contains("["), ERR_INVALID_PARAMETER, "Invalid animation name: " + String(p_name) + ".");
@@ -299,14 +301,14 @@ Error AnimationMixer::add_animation_library(const StringName &p_name, const Ref<
 	ald.library->connect(SNAME("animation_renamed"), callable_mp(this, &AnimationMixer::_animation_renamed).bind(p_name));
 	ald.library->connect(SNAME("animation_changed"), callable_mp(this, &AnimationMixer::_animation_changed));
 
-	_animation_set_cache_update();
+	_animation_set_cache_update(emit_list_changed);
 
 	notify_property_list_changed();
 
 	return OK;
 }
 
-void AnimationMixer::remove_animation_library(const StringName &p_name) {
+void AnimationMixer::remove_animation_library(const StringName &p_name, bool emit_list_changed) {
 	int at_pos = -1;
 
 	for (uint32_t i = 0; i < animation_libraries.size(); i++) {
@@ -324,7 +326,7 @@ void AnimationMixer::remove_animation_library(const StringName &p_name) {
 	animation_libraries[at_pos].library->disconnect(SNAME("animation_changed"), callable_mp(this, &AnimationMixer::_animation_changed));
 
 	animation_libraries.remove_at(at_pos);
-	_animation_set_cache_update();
+	_animation_set_cache_update(emit_list_changed);
 
 	notify_property_list_changed();
 }
@@ -448,9 +450,9 @@ bool AnimationMixer::is_active() const {
 	return active;
 }
 
-void AnimationMixer::set_root_node(const NodePath &p_path) {
+void AnimationMixer::set_root_node(const NodePath &p_path, bool emit_signal) {
 	root_node = p_path;
-	_clear_caches();
+	_clear_caches(emit_signal);
 }
 
 NodePath AnimationMixer::get_root_node() const {
@@ -555,7 +557,7 @@ bool AnimationMixer::is_dummy() const {
 /* -- Caches for blending --------------------- */
 /* -------------------------------------------- */
 
-void AnimationMixer::_clear_caches() {
+void AnimationMixer::_clear_caches(bool p_emit_signal) {
 	_init_root_motion_cache();
 	_clear_audio_streams();
 	_clear_playing_caches();
@@ -566,7 +568,9 @@ void AnimationMixer::_clear_caches() {
 	cache_valid = false;
 	capture_cache.clear();
 
-	emit_signal(SNAME("caches_cleared"));
+	if (p_emit_signal) {
+		emit_signal(SNAME("caches_cleared"));
+	}
 }
 
 void AnimationMixer::_clear_audio_streams() {
@@ -1860,8 +1864,8 @@ void AnimationMixer::advance(double p_time) {
 	_process_animation(p_time);
 }
 
-void AnimationMixer::clear_caches() {
-	_clear_caches();
+void AnimationMixer::clear_caches(bool p_emit_signal) {
+	_clear_caches(p_emit_signal);
 }
 
 /* -------------------------------------------- */

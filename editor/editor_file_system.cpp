@@ -2043,6 +2043,10 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 		generator_parameters = *p_generator_parameters;
 	}
 
+	bool bulk_import_anim = false;
+	String anim_library_path = "";
+	Array slices;
+
 	if (FileAccess::exists(p_file + ".import")) {
 		//use existing
 		Ref<ConfigFile> cf;
@@ -2075,6 +2079,97 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 					}
 				}
 			}
+		}
+	} else {
+		// only process file as bulk import if it doesn't already have a file specific .import file as we don't want to keep processing files over and over if they're already done
+		// as the only processing bulk import cares about is setting save to file to true, setting up slices and automatically adding the saved file to an animation library
+		// once that's done we can still keep updating the source animation file without needing to update anything bulk import wise as long as slices / animation libraries don't change
+		// we can also specifically delete the .import file if we manually want to force a refresh for some reason
+		
+		// bulk import file checking (for animations only at this stage)
+		if (FileAccess::exists(p_file + ".bulkimport")) {
+			Ref<ConfigFile> cf;
+			cf.instantiate();
+			Error err = cf->load(p_file + ".bulkimport");
+			if (err == OK) {
+				// set up slices as defined in file specific .bulkimport file
+				bulk_import_anim = true;
+				if (cf->has_section("params")) {
+					List<String> sk;
+					cf->get_section_keys("params", &sk);
+					for (const String &E : sk) {
+						if (E == "anims") {
+							slices = Dictionary(cf->get_value("params", E)).keys();
+							break;
+						}
+					}
+				}
+			}
+		} else {
+			String folder_path = p_file.substr(0, p_file.rfind("/") + 1);
+			int project_path_length = String("res://").length();
+
+			while (folder_path.length() > project_path_length) {
+				if (FileAccess::exists(folder_path + "_anims.bulkimport")) {
+					Ref<ConfigFile> cf;
+					cf.instantiate();
+					Error err = cf->load(folder_path + "_anims.bulkimport");
+					if (err == OK) {
+						// automatically set this file to import as animation, turn on save to file and set the path to the same path as the file itself
+						bulk_import_anim = true;
+
+						if (cf->has_section("params")) {
+							List<String> sk;
+							cf->get_section_keys("params", &sk);
+							for (const String &E : sk) {
+								if (E == "library") {
+									anim_library_path = folder_path + String(cf->get_value("params", E));
+									break;
+								}
+							}
+						}
+						break;
+					}
+				}
+				folder_path = folder_path.substr(0, folder_path.rfind("/", folder_path.length() - 2) + 1);
+			}
+		}
+
+		// locate anim library path if it isn't already set (if this file has a specific .bulkimport file)
+		if (bulk_import_anim && anim_library_path.length() == 0) {
+			String folder_path = p_file.substr(0, p_file.rfind("/") + 1);
+			int project_path_length = String("res://").length();
+
+			while (folder_path.length() > project_path_length) {
+				if (FileAccess::exists(folder_path + "_anims.bulkimport")) {
+					Ref<ConfigFile> cf;
+					cf.instantiate();
+					Error err = cf->load(folder_path + "_anims.bulkimport");
+					if (err == OK) {
+						if (cf->has_section("params")) {
+							List<String> sk;
+							cf->get_section_keys("params", &sk);
+							for (const String &E : sk) {
+								if (E == "library") {
+									anim_library_path = folder_path + String(cf->get_value("params", E));
+
+									if (!FileAccess::exists(anim_library_path)) {
+										ERR_FAIL_V_MSG(ERR_FILE_CANT_OPEN, "BulkImport -> animation library file: " + anim_library_path + " - not found, in: " + folder_path + "_anims.bulkimport");
+									}
+									break;
+								}
+							}
+						}
+						break;
+					}
+				}
+				folder_path = folder_path.substr(0, folder_path.rfind("/", folder_path.length() - 2) + 1);
+			}
+		}
+
+		if (bulk_import_anim && anim_library_path.length() == 0) {
+			// couldn't find a library to import it into, don't do anything
+			bulk_import_anim = false;
 		}
 	}
 
@@ -2128,6 +2223,40 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 		for (const Variant &E : v) {
 			params[E] = d[E];
 		}
+	}
+
+	// add bulk import data to params (for animations only at this stage)
+	if (bulk_import_anim) {
+		Dictionary subresources = params["_subresources"];
+		subresources["animations"] = Dictionary();
+		Dictionary animation_data = subresources["animations"];
+		Dictionary bulk_data = Dictionary();
+		bulk_data["slices/amount"] = slices.size();
+
+		for (int i = 0; i < slices.size(); ++i) {
+			PackedStringArray tokens = String(slices[i]).split(",");
+			if (tokens.size() == 4) {
+				bulk_data["slice_" + itos(i + 1) + "/name"] = Variant(tokens[0]);
+				bulk_data["slice_" + itos(i + 1) + "/loop_mode"] = Variant(tokens[1].to_int());
+				bulk_data["slice_" + itos(i + 1) + "/start_frame"] = Variant(tokens[2].to_int());
+				bulk_data["slice_" + itos(i + 1) + "/end_frame"] = Variant(tokens[3].to_int());
+				bulk_data["slice_" + itos(i + 1) + "/save_to_file/enabled"] = Variant(true);
+				bulk_data["slice_" + itos(i + 1) + "/save_to_file/path"] = Variant(p_file.substr(0, p_file.rfind("/") + 1) + tokens[0] + ".res");
+				bulk_data["slice_" + itos(i + 1) + "/save_to_file/keep_custom_tracks"] = Variant("");
+			}
+		}
+
+		if (slices.size() == 0) {
+			bulk_data["save_to_file/enabled"] = Variant(true);
+			bulk_data["save_to_file/path"] = Variant(p_file.substr(0, p_file.rfind(".")) + ".res");
+			bulk_data["save_to_file/keep_custom_tracks"] = Variant("");
+			bulk_data["settings/loop_mode"] = Variant(0); // by default do not set looping; will have to manually set loop mode to linear (to looping) for relevant anims
+		}
+
+		bulk_data["anim_library_path"] = anim_library_path;
+		animation_data["_bulk_import"] = bulk_data;
+		subresources["animations"] = animation_data;
+		//params["_subresources"] = subresources; // not needed, already updated by above line
 	}
 
 	//finally, perform import!!

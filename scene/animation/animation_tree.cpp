@@ -834,22 +834,22 @@ void AnimationTree::_setup_animation_player() {
 		}
 		Node *root = player->get_node_or_null(player->get_root_node());
 		if (root) {
-			set_root_node(get_path_to(root, true));
+			set_root_node(get_path_to(root, true), false);
 		}
 		while (animation_libraries.size()) {
-			remove_animation_library(animation_libraries[0].name);
+			remove_animation_library(animation_libraries[0].name, false);
 		}
 		List<StringName> list;
 		player->get_animation_library_list(&list);
 		for (int i = 0; i < list.size(); i++) {
 			Ref<AnimationLibrary> lib = player->get_animation_library(list[i]);
 			if (lib.is_valid()) {
-				add_animation_library(list[i], lib);
+				add_animation_library(list[i], lib, false);
 			}
 		}
 	}
 
-	clear_caches();
+	clear_caches(false);
 }
 
 void AnimationTree::_validate_property(PropertyInfo &p_property) const {

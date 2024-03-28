@@ -285,10 +285,11 @@ public:
 	Node *_pre_fix_node(Node *p_node, Node *p_root, HashMap<Ref<ImporterMesh>, Vector<Ref<Shape3D>>> &r_collision_map, Pair<PackedVector3Array, PackedInt32Array> *r_occluder_arrays, List<Pair<NodePath, Node *>> &r_node_renames);
 	Node *_pre_fix_animations(Node *p_node, Node *p_root, const Dictionary &p_node_data, const Dictionary &p_animation_data, float p_animation_fps);
 	Node *_post_fix_node(Node *p_node, Node *p_root, HashMap<Ref<ImporterMesh>, Vector<Ref<Shape3D>>> &collision_map, Pair<PackedVector3Array, PackedInt32Array> &r_occluder_arrays, HashSet<Ref<ImporterMesh>> &r_scanned_meshes, const Dictionary &p_node_data, const Dictionary &p_material_data, const Dictionary &p_animation_data, float p_animation_fps, float p_applied_root_scale);
-	Node *_post_fix_animations(Node *p_node, Node *p_root, const Dictionary &p_node_data, const Dictionary &p_animation_data, float p_animation_fps);
+	Node *_post_fix_animations(Node *p_node, Node *p_root, const Dictionary &p_node_data, Dictionary &p_animation_data, float p_animation_fps);
+	void _add_anim_to_library(Ref<Animation> p_anim, const String &p_name, const String &p_library_path);
 
 	Ref<Animation> _save_animation_to_file(Ref<Animation> anim, bool p_save_to_file, const String &p_save_to_path, bool p_keep_custom_tracks);
-	void _create_slices(AnimationPlayer *ap, Ref<Animation> anim, const Array &p_clips, bool p_bake_all);
+	void _create_slices(AnimationPlayer *ap, Ref<Animation> anim, const Array &p_clips, bool p_bake_all, bool p_bulk_import, const String &p_bulk_import_path);
 	void _optimize_animations(AnimationPlayer *anim, float p_max_vel_error, float p_max_ang_error, int p_prc_error);
 	void _compress_animations(AnimationPlayer *anim, int p_page_size_kb);
 
