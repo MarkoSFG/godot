@@ -38,6 +38,7 @@
 
 class AnimationNodeBlendTree;
 class AnimationNodeStartState;
+class AnimationNodeAnyState;
 class AnimationNodeEndState;
 class AnimationTree;
 
@@ -182,6 +183,10 @@ class AnimationNodeStartState : public AnimationRootNode {
 	GDCLASS(AnimationNodeStartState, AnimationRootNode);
 };
 
+class AnimationNodeAnyState : public AnimationRootNode {
+	GDCLASS(AnimationNodeAnyState, AnimationRootNode);
+};
+
 class AnimationNodeEndState : public AnimationRootNode {
 	GDCLASS(AnimationNodeEndState, AnimationRootNode);
 };
@@ -214,8 +219,10 @@ private:
 	HashMap<ObjectID, StringName> property_reference_map;
 	HashMap<StringName, Pair<Variant, bool>> property_map; // Property value and read-only flag.
 	HashMap<StringName, Variant> shared_property_map; // shared parameters
+	Vector<StringName> active_triggers;
 
 	bool properties_dirty = true;
+	bool triggers_active = false;
 
 	void _update_properties();
 	void _update_properties_for_node(const String &p_base_path, Ref<AnimationNode> p_node);
@@ -248,6 +255,7 @@ private:
 
 	// Make animation instances.
 	virtual bool _blend_pre_process(double p_delta, int p_track_count, const HashMap<NodePath, int> &p_track_map) override;
+	virtual void _blend_post_process() override;
 
 #ifndef DISABLE_DEPRECATED
 	void _set_process_callback_bind_compat_80813(AnimationProcessCallback p_mode);
@@ -275,6 +283,9 @@ public:
 	void set_shared_parameters(const Dictionary &p_data);
 	Dictionary get_shared_parameters() const;
 
+	void set_trigger(const StringName &p_name);
+	void reset_trigger(const StringName &p_name);
+
 	PackedStringArray get_configuration_warnings() const override;
 
 	bool is_state_invalid() const;
@@ -285,6 +296,7 @@ public:
 	uint64_t get_last_process_pass() const;
 
 	void rename_shared_parameter(const String &p_old_text, const String &p_text);
+	bool any_triggers_active() const;
 
 	AnimationTree();
 	~AnimationTree();

@@ -101,6 +101,7 @@ class EditorThemeManager {
 		Color error_color;
 		Color extra_border_color_1;
 		Color extra_border_color_2;
+		Color any_state_color;
 
 		Color font_color;
 		Color font_focus_color;

@@ -262,22 +262,27 @@ double AnimationNode::_blend_node(Ref<AnimationNode> p_node, const StringName &p
 		}
 	}
 
-	String new_path;
+	//String new_path;
 	AnimationNode *new_parent;
 
-	// This is the slowest part of processing, but as strings process in powers of 2, and the paths always exist, it will not result in that many allocations.
+	// WIP: cache off base_path on AnimationNode and only process / allocate new strings if it's "dirty" (simply set base_path = StringName() to dirty it), do not allocate strings every frame
+	// OLD: This is the slowest part of processing, but as strings process in powers of 2, and the paths always exist, it will not result in that many allocations.
 	if (p_new_parent) {
 		new_parent = p_new_parent;
-		new_path = String(node_state.base_path) + String(p_subpath) + "/";
+		if (p_node->node_state.base_path == StringName()) {
+			p_node->node_state.base_path = String(node_state.base_path) + String(p_subpath) + "/";
+		}
 	} else {
 		ERR_FAIL_NULL_V(node_state.parent, 0);
 		new_parent = node_state.parent;
-		new_path = String(new_parent->node_state.base_path) + String(p_subpath) + "/";
+		if (p_node->node_state.base_path == StringName()) {
+			p_node->node_state.base_path = String(new_parent->node_state.base_path) + String(p_subpath) + "/";
+		}
 	}
 
 	// This process, which depends on p_sync is needed to process sync correctly in the case of
 	// that a synced AnimationNodeSync exists under the un-synced AnimationNodeSync.
-	p_node->node_state.base_path = new_path;
+	//p_node->node_state.base_path = new_path;
 	p_node->node_state.parent = new_parent;
 	if (!p_playback_info.seeked && !p_sync && !any_valid) {
 		p_playback_info.time = 0.0;
@@ -593,6 +598,16 @@ bool AnimationTree::_blend_pre_process(double p_delta, int p_track_count, const 
 	return true;
 }
 
+void AnimationTree::_blend_post_process() {
+	if (triggers_active) {
+		triggers_active = false;
+		for (int i = 0; i < active_triggers.size(); ++i) {
+			set(active_triggers[i], false);
+		}
+		active_triggers.clear();
+	}
+}
+
 void AnimationTree::_set_active(bool p_active) {
 	_set_process(p_active);
 	started = p_active;
@@ -640,6 +655,19 @@ Dictionary AnimationTree::get_shared_parameters() const {
 	return ret;
 }
 
+void AnimationTree::set_trigger(const StringName& p_name) {
+	triggers_active = true;
+	set(p_name, true);
+	if (!active_triggers.has(p_name)) {
+		active_triggers.push_back(p_name);
+	}
+}
+
+void AnimationTree::reset_trigger(const StringName& p_name) {
+	set(p_name, false);
+	active_triggers.erase(p_name);
+}
+
 bool AnimationTree::is_state_invalid() const {
 	return !process_state.valid;
 }
@@ -662,6 +690,10 @@ void AnimationTree::rename_shared_parameter(const String& p_old_text, const Stri
 	/*if (root_animation_node.is_valid()) {
 		root_animation_node->shared_parameter_renamed(this, p_old_text, p_text);
 	}*/
+}
+
+bool AnimationTree::any_triggers_active() const {
+	return triggers_active;
 }
 
 PackedStringArray AnimationTree::get_configuration_warnings() const {
@@ -952,6 +984,9 @@ void AnimationTree::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("rename_shared_parameter", "old_text", "text"), &AnimationTree::rename_shared_parameter);
 
+	ClassDB::bind_method(D_METHOD("set_trigger", "name"), &AnimationTree::set_trigger);
+	ClassDB::bind_method(D_METHOD("reset_trigger", "name"), &AnimationTree::reset_trigger);
+
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "tree_root", PROPERTY_HINT_RESOURCE_TYPE, "AnimationRootNode"), "set_tree_root", "get_tree_root");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "advance_expression_base_node", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Node"), "set_advance_expression_base_node", "get_advance_expression_base_node");
 	ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "anim_player", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "AnimationPlayer"), "set_animation_player", "get_animation_player");
@@ -965,6 +1000,7 @@ void AnimationTree::_bind_methods() {
 AnimationTree::AnimationTree() {
 	deterministic = true;
 	callback_mode_discrete = ANIMATION_CALLBACK_MODE_DISCRETE_FORCE_CONTINUOUS;
+	active_triggers.clear();
 }
 
 AnimationTree::~AnimationTree() {

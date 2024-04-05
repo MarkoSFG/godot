@@ -1210,6 +1210,9 @@ void AnimationNodeStateMachineEditor::_state_machine_draw() {
 		if (!is_selected && state_machine->start_node == name) {
 			state_machine_draw->draw_style_box(theme_cache.node_frame_start, nr.node);
 		}
+		if (!is_selected && state_machine->any_state_node == name) {
+			state_machine_draw->draw_style_box(theme_cache.node_frame_any_state, nr.node);
+		}
 		if (!is_selected && state_machine->end_node == name) {
 			state_machine_draw->draw_style_box(theme_cache.node_frame_end, nr.node);
 		}
@@ -1219,16 +1222,20 @@ void AnimationNodeStateMachineEditor::_state_machine_draw() {
 
 		offset.x += node_frame_style->get_offset().x;
 
-		nr.play.position = offset + Vector2(0, (h - theme_cache.play_node->get_height()) / 2).floor();
-		nr.play.size = theme_cache.play_node->get_size();
-
-		if (hovered_node_name == name && hovered_node_area == HOVER_NODE_PLAY) {
-			state_machine_draw->draw_texture(theme_cache.play_node, nr.play.position, theme_cache.highlight_color);
+		if (state_machine->any_state_node == name) {
+			offset.x += (sep + theme_cache.play_node->get_width()) * 0.5;
 		} else {
-			state_machine_draw->draw_texture(theme_cache.play_node, nr.play.position);
-		}
+			nr.play.position = offset + Vector2(0, (h - theme_cache.play_node->get_height()) / 2).floor();
+			nr.play.size = theme_cache.play_node->get_size();
 
-		offset.x += sep + theme_cache.play_node->get_width();
+			if (hovered_node_name == name && hovered_node_area == HOVER_NODE_PLAY) {
+				state_machine_draw->draw_texture(theme_cache.play_node, nr.play.position, theme_cache.highlight_color);
+			} else {
+				state_machine_draw->draw_texture(theme_cache.play_node, nr.play.position);
+			}
+
+			offset.x += sep + theme_cache.play_node->get_width();
+		}
 
 		nr.name.position = offset + Vector2(0, (h - theme_cache.node_title_font->get_height(theme_cache.node_title_font_size)) / 2).floor();
 		nr.name.size = Vector2(name_string_size, theme_cache.node_title_font->get_height(theme_cache.node_title_font_size));
@@ -1284,7 +1291,7 @@ void AnimationNodeStateMachineEditor::_state_machine_pos_draw_individual(const S
 		return;
 	}
 
-	if (p_name == state_machine->start_node || p_name == state_machine->end_node || p_name.is_empty()) {
+	if (p_name == state_machine->start_node || p_name == state_machine->end_node || p_name == state_machine->any_state_node || p_name.is_empty()) {
 		return;
 	}
 
@@ -1619,7 +1626,7 @@ void AnimationNodeStateMachineEditor::_erase_selected(const bool p_nested_action
 		undo_redo->create_action(TTR("Node Removed"));
 
 		for (int i = 0; i < node_rects.size(); i++) {
-			if (node_rects[i].node_name == state_machine->start_node || node_rects[i].node_name == state_machine->end_node) {
+			if (node_rects[i].node_name == state_machine->start_node || node_rects[i].node_name == state_machine->end_node || node_rects[i].node_name == state_machine->any_state_node) {
 				continue;
 			}
 
@@ -1704,7 +1711,7 @@ void AnimationNodeStateMachineEditor::_update_mode() {
 	if (tool_select->is_pressed()) {
 		selection_tools_hb->show();
 		bool nothing_selected = selected_nodes.is_empty() && selected_transition_from == StringName() && selected_transition_to == StringName();
-		bool start_end_selected = selected_nodes.size() == 1 && (*selected_nodes.begin() == state_machine->start_node || *selected_nodes.begin() == state_machine->end_node);
+		bool start_end_selected = selected_nodes.size() == 1 && (*selected_nodes.begin() == state_machine->start_node || *selected_nodes.begin() == state_machine->end_node || *selected_nodes.begin() == state_machine->any_state_node);
 		tool_erase->set_disabled(nothing_selected || start_end_selected || read_only);
 	} else {
 		selection_tools_hb->hide();
@@ -1748,6 +1755,7 @@ void AnimationNodeStateMachineEditor::_bind_methods() {
 	BIND_THEME_ITEM_EXT(Theme::DATA_TYPE_STYLEBOX, AnimationNodeStateMachineEditor, node_frame_selected, "node_frame_selected", "GraphStateMachine");
 	BIND_THEME_ITEM_EXT(Theme::DATA_TYPE_STYLEBOX, AnimationNodeStateMachineEditor, node_frame_playing, "node_frame_playing", "GraphStateMachine");
 	BIND_THEME_ITEM_EXT(Theme::DATA_TYPE_STYLEBOX, AnimationNodeStateMachineEditor, node_frame_start, "node_frame_start", "GraphStateMachine");
+	BIND_THEME_ITEM_EXT(Theme::DATA_TYPE_STYLEBOX, AnimationNodeStateMachineEditor, node_frame_any_state, "node_frame_any_state", "GraphStateMachine");
 	BIND_THEME_ITEM_EXT(Theme::DATA_TYPE_STYLEBOX, AnimationNodeStateMachineEditor, node_frame_end, "node_frame_end", "GraphStateMachine");
 
 	BIND_THEME_ITEM_EXT(Theme::DATA_TYPE_FONT, AnimationNodeStateMachineEditor, node_title_font, "node_title_font", "GraphStateMachine");

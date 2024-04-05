@@ -102,6 +102,7 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 		Ref<StyleBox> node_frame_selected;
 		Ref<StyleBox> node_frame_playing;
 		Ref<StyleBox> node_frame_start;
+		Ref<StyleBox> node_frame_any_state;
 		Ref<StyleBox> node_frame_end;
 
 		Ref<Font> node_title_font;

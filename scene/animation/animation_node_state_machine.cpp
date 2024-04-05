@@ -187,6 +187,12 @@ void AnimationNodeStateMachinePlayback::_set_current(AnimationNodeStateMachine *
 		return;
 	}
 
+	if (p_state_machine->transitions_by_node.has(current)) {
+		current_transitions = p_state_machine->transitions_by_node[current];
+	} else {
+		current_transitions = no_transitions;
+	}
+
 	Ref<AnimationNodeStateMachine> anodesm = p_state_machine->find_node_by_path(current);
 	if (!anodesm.is_valid()) {
 		group_start_transition = Ref<AnimationNodeStateMachineTransition>();
@@ -842,6 +848,15 @@ double AnimationNodeStateMachinePlayback::_process(const String &p_base_path, An
 		rem = p_state_machine->blend_node(p_state_machine->states[current].node, current, pi, AnimationNode::FILTER_IGNORE, true, p_test_only); // Blend values must be more than CMP_EPSILON to process discrete keys in edge.
 	}
 
+	// TODO add any number of ongoing fades here, so we should have a queue of fade infos ((A->B)->C)->D
+	// D blend is handled just above
+	// C blend is handled here
+	// B blend is handled here
+	// A blend is handled here
+	// if the C blend completes it will remove A and B blends as well
+	// if the B blend completes it just removes the A blend as per normal
+	// # therefore we should process backwards through the queue, C does its blend with its fade time and the remainder gets passed onto A->B blend as a time remainder multiplier
+	// # the time remainder multiplier should continue to propagate (each time further being multiplied by current time remainder) until it reaches the start of the queue
 	// Cross-fade process.
 	if (fading_from != StringName()) {
 		double fade_blend_inv = 1.0 - fade_blend;
@@ -924,13 +939,14 @@ bool AnimationNodeStateMachinePlayback::_transition_to_next_recursive(AnimationT
 	transition_path.push_back(current);
 	while (true) {
 		next = _find_next(p_tree, p_state_machine);
-		if (transition_path.has(next.node)) {
-			WARN_PRINT_ONCE_ED("AnimationNodeStateMachinePlayback: " + base_path + "playback aborts the transition by detecting one or more looped transitions in the same frame to prevent to infinity loop. You may need to check the transition settings.");
-			break; // Maybe infinity loop, do nothing more.
-		}
 
 		if (!_can_transition_to_next(p_tree, p_state_machine, next, p_test_only)) {
 			break; // Finish transition.
+		}
+
+		if (transition_path.has(next.node)) {
+			WARN_PRINT_ONCE_ED("AnimationNodeStateMachinePlayback: " + base_path + "playback aborts the transition by detecting one or more looped transitions in the same frame to prevent to infinity loop. You may need to check the transition settings.");
+			break; // Maybe infinity loop, do nothing more.
 		}
 
 		transition_path.push_back(next.node);
@@ -1089,14 +1105,14 @@ AnimationNodeStateMachinePlayback::NextInfo AnimationNodeStateMachinePlayback::_
 	} else {
 		int auto_advance_to = -1;
 		float priority_best = 1e20;
-		for (int i = 0; i < p_state_machine->transitions.size(); i++) {
+		for (int i = 0; i < current_transitions.size(); i++) {
 			Ref<AnimationNodeStateMachine> anodesm = p_state_machine;
 			bool bypass = false;
-			Ref<AnimationNodeStateMachineTransition> ref_transition = _check_group_transition(p_tree, p_state_machine, p_state_machine->transitions[i], anodesm, bypass);
+			Ref<AnimationNodeStateMachineTransition> ref_transition = _check_group_transition(p_tree, p_state_machine, current_transitions[i], anodesm, bypass);
 			if (ref_transition->get_advance_mode() == AnimationNodeStateMachineTransition::ADVANCE_MODE_DISABLED) {
 				continue;
 			}
-			if (p_state_machine->transitions[i].from == current && (_check_advance_condition(anodesm, ref_transition) || bypass)) {
+			if (_check_advance_condition(anodesm, ref_transition) || bypass) {
 				if (ref_transition->get_priority() <= priority_best) {
 					priority_best = ref_transition->get_priority();
 					auto_advance_to = i;
@@ -1104,11 +1120,34 @@ AnimationNodeStateMachinePlayback::NextInfo AnimationNodeStateMachinePlayback::_
 			}
 		}
 
+		if (p_tree->any_triggers_active()) {
+			// check AnyState transitions (these always take priority over current_transitions)
+			if (p_state_machine->transitions_by_node.has("Any State")) {
+				Vector<AnimationNodeStateMachine::Transition> any_transitions = p_state_machine->transitions_by_node["Any State"];
+				float any_priority_best = 1e20;
+
+				for (int i = 0; i < any_transitions.size(); i++) {
+					Ref<AnimationNodeStateMachine> anodesm = p_state_machine;
+					bool bypass = false;
+					Ref<AnimationNodeStateMachineTransition> ref_transition = _check_group_transition(p_tree, p_state_machine, any_transitions[i], anodesm, bypass);
+					if (ref_transition->get_advance_mode() == AnimationNodeStateMachineTransition::ADVANCE_MODE_DISABLED) {
+						continue;
+					}
+					if (_check_advance_condition(anodesm, ref_transition) || bypass) {
+						if (ref_transition->get_priority() <= any_priority_best) {
+							any_priority_best = ref_transition->get_priority();
+							auto_advance_to = i;
+						}
+					}
+				}
+			}
+		}
+
 		if (auto_advance_to != -1) {
-			next.node = p_state_machine->transitions[auto_advance_to].to;
+			next.node = current_transitions[auto_advance_to].to;
 			Ref<AnimationNodeStateMachine> anodesm = p_state_machine;
 			bool bypass = false;
-			Ref<AnimationNodeStateMachineTransition> ref_transition = _check_group_transition(p_tree, p_state_machine, p_state_machine->transitions[auto_advance_to], anodesm, bypass);
+			Ref<AnimationNodeStateMachineTransition> ref_transition = _check_group_transition(p_tree, p_state_machine, current_transitions[auto_advance_to], anodesm, bypass);
 			next.xfade = ref_transition->get_xfade_time();
 			next.curve = ref_transition->get_xfade_curve();
 			next.switch_mode = ref_transition->get_switch_mode();
@@ -1223,6 +1262,8 @@ void AnimationNodeStateMachinePlayback::_bind_methods() {
 
 AnimationNodeStateMachinePlayback::AnimationNodeStateMachinePlayback() {
 	set_local_to_scene(true); // Only one per instantiated scene.
+	no_transitions.clear();
+	current_transitions = no_transitions;
 	default_transition.instantiate();
 	default_transition->set_xfade_time(0);
 	default_transition->set_reset(true);
@@ -1337,7 +1378,7 @@ bool AnimationNodeStateMachine::are_ends_reset() const {
 
 bool AnimationNodeStateMachine::can_edit_node(const StringName &p_name) const {
 	if (states.has(p_name)) {
-		return !(states[p_name].node->is_class("AnimationNodeStartState") || states[p_name].node->is_class("AnimationNodeEndState"));
+		return !(states[p_name].node->is_class("AnimationNodeStartState") || states[p_name].node->is_class("AnimationNodeEndState") || states[p_name].node->is_class("AnimationNodeAnyState"));
 	}
 
 	return true;
@@ -1438,6 +1479,25 @@ void AnimationNodeStateMachine::_rename_transitions(const StringName &p_name, co
 			transitions.write[i].to = p_new_name;
 		}
 	}
+
+	if (transitions_by_node.has(p_name)) {
+		transitions_by_node[p_new_name] = transitions_by_node[p_name];
+		transitions_by_node.erase(p_name);
+	}
+
+	for (KeyValue<StringName, Vector<Transition>> &E : transitions_by_node) {
+		for (int i = 0; i < E.value.size(); i++) {
+			Transition tr = E.value[i];
+			if (tr.from == p_name) {
+				tr.from = p_new_name;
+			}
+			if (tr.to == p_name) {
+				tr.to = p_new_name;
+			}
+			E.value.set(i, tr);
+		}
+	}
+
 	updating_transitions = false;
 }
 
@@ -1554,11 +1614,17 @@ void AnimationNodeStateMachine::add_multi_transition(const StringName &p_from, c
 
 	tr.transition->connect("advance_condition_changed", callable_mp(this, &AnimationNodeStateMachine::_tree_changed), CONNECT_REFERENCE_COUNTED);
 
+	if (!transitions_by_node.has(p_from)) {
+		transitions_by_node[p_from] = Vector<Transition>();
+	}
+
 	// cycle through the list of transitions and compare from / to and insert the transition based on the passed p_index and how many from / to duplicates we find
 	if (transitions.size() == 0) {
 		transitions.push_back(tr);
+		transitions_by_node[p_from].push_back(tr);
 	} else if (p_idx <= 0) {
 		transitions.insert(0, tr);
+		transitions_by_node[p_from].insert(0, tr);
 	} else {
 		int index = p_idx;
 		for (int i = 0; i < transitions.size() - 1; i++) {
@@ -1566,12 +1632,14 @@ void AnimationNodeStateMachine::add_multi_transition(const StringName &p_from, c
 				--index;
 				if (index <= 0) {
 					transitions.insert(i + 1, tr);
+					transitions_by_node[p_from].insert(p_idx, tr); // TODO make sure this works correctly / lines up with order in global transitions list
 					break;
 				}
 			}
 		}
 		if (index > 0) {
 			transitions.push_back(tr);
+			transitions_by_node[p_from].push_back(tr);
 		}
 	}
 
@@ -1599,6 +1667,11 @@ void AnimationNodeStateMachine::add_transition(const StringName &p_from, const S
 	tr.transition->connect("advance_condition_changed", callable_mp(this, &AnimationNodeStateMachine::_tree_changed), CONNECT_REFERENCE_COUNTED);
 
 	transitions.push_back(tr);
+
+	if (!transitions_by_node.has(p_from)) {
+		transitions_by_node[p_from] = Vector<Transition>();
+	}
+	transitions_by_node[p_from].push_back(tr);
 
 	updating_transitions = false;
 }
@@ -1637,10 +1710,25 @@ void AnimationNodeStateMachine::remove_multi_transition(const StringName &p_from
 	for (int i = 0; i < transitions.size(); i++) {
 		if (transitions[i].from == p_from && transitions[i].to == p_to) {
 			if (index <= 0) {
-				remove_transition_by_index(i);
-				return;
+				remove_transition_by_index_node(i, false); // we want to remove the one at the desired index so don't let it be removed here
+				break;
 			} else {
 				--index;
+			}
+		}
+	}
+
+	index = p_idx;
+	if (transitions_by_node.has(p_from)) {
+		Vector<Transition> trans_list = transitions_by_node[p_from];
+		for (int i = 0; i < trans_list.size(); i++) {
+			if (trans_list[i].to == p_to) {
+				if (index <= 0) {
+					trans_list.remove_at(i);
+					break;
+				} else {
+					--index;
+				}
 			}
 		}
 	}
@@ -1656,6 +1744,10 @@ void AnimationNodeStateMachine::remove_transition(const StringName &p_from, cons
 }
 
 void AnimationNodeStateMachine::remove_transition_by_index(const int p_transition) {
+	remove_transition_by_index_node(p_transition, true);
+}
+
+void AnimationNodeStateMachine::remove_transition_by_index_node(const int p_transition, bool remove_by_node) {
 	ERR_FAIL_INDEX(p_transition, transitions.size());
 	Transition tr = transitions[p_transition];
 	transitions.write[p_transition].transition->disconnect("advance_condition_changed", callable_mp(this, &AnimationNodeStateMachine::_tree_changed));
@@ -1667,6 +1759,20 @@ void AnimationNodeStateMachine::remove_transition_by_index(const int p_transitio
 	List<Vector<String>> paths;
 	paths.push_back(path_from);
 	paths.push_back(path_to);
+
+	if (remove_by_node && transitions_by_node.has(tr.from)) {
+		bool found = false;
+		Vector<Transition> trans_list = transitions_by_node[tr.from];
+		for (int i = 0; i < trans_list.size(); i++) {
+			if (trans_list[i].to == tr.to) {
+				ERR_FAIL_COND_MSG(found, "Don't call remove_transition_by_index_node with remove_by_node set to true if there is more than 1 transition from one node to another.");
+				trans_list.remove_at(i);
+				found = true;
+				--i;
+				// let the loop continue for error detection (to see if there are multiple transitions from one state to the other)
+			}
+		}
+	}
 }
 
 void AnimationNodeStateMachine::_remove_transition(const Ref<AnimationNodeStateMachineTransition> p_transition) {
@@ -1811,6 +1917,8 @@ void AnimationNodeStateMachine::_validate_property(PropertyInfo &p_property) con
 void AnimationNodeStateMachine::reset_state() {
 	states.clear();
 	transitions.clear();
+	transitions_by_node.clear();
+
 	playback = "playback";
 	start_node = "Start";
 	end_node = "End";
@@ -1822,6 +1930,13 @@ void AnimationNodeStateMachine::reset_state() {
 	start.node = s;
 	start.position = Vector2(200, 100);
 	states[start_node] = start;
+
+	Ref<AnimationNodeAnyState> a;
+	a.instantiate();
+	State any_state;
+	any_state.node = a;
+	any_state.position = Vector2(200, 0);
+	states[any_state_node] = any_state;
 
 	Ref<AnimationNodeEndState> e;
 	e.instantiate();
@@ -1926,6 +2041,13 @@ AnimationNodeStateMachine::AnimationNodeStateMachine() {
 	start.node = s;
 	start.position = Vector2(200, 100);
 	states[start_node] = start;
+
+	Ref<AnimationNodeAnyState> a;
+	a.instantiate();
+	State any_state;
+	any_state.node = a;
+	any_state.position = Vector2(200, 0);
+	states[any_state_node] = any_state;
 
 	Ref<AnimationNodeEndState> e;
 	e.instantiate();

@@ -133,6 +133,7 @@ private:
 	};
 
 	Vector<Transition> transitions;
+	HashMap<StringName, Vector<Transition>> transitions_by_node;
 
 	StringName playback = "playback";
 	bool updating_transitions = false;
@@ -162,6 +163,7 @@ protected:
 public:
 	StringName start_node = "Start";
 	StringName end_node = "End";
+	StringName any_state_node = "Any State";
 
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
@@ -196,6 +198,7 @@ public:
 	int get_transition_count() const;
 	bool is_transition_across_group(int p_transition) const;
 	void remove_transition_by_index(const int p_transition);
+	void remove_transition_by_index_node(const int p_transition, bool remove_by_node);
 	void remove_multi_transition(const StringName &p_from, const StringName &p_to, int index);
 	void remove_transition(const StringName &p_from, const StringName &p_to);
 
@@ -268,6 +271,8 @@ class AnimationNodeStateMachinePlayback : public Resource {
 
 	StringName current;
 	Ref<Curve> current_curve;
+	Vector<AnimationNodeStateMachine::Transition> current_transitions;
+	Vector<AnimationNodeStateMachine::Transition> no_transitions;
 
 	Ref<AnimationNodeStateMachineTransition> group_start_transition;
 	Ref<AnimationNodeStateMachineTransition> group_end_transition;

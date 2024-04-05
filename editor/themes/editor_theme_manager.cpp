@@ -428,11 +428,13 @@ void EditorThemeManager::_create_shared_styles(const Ref<EditorTheme> &p_theme, 
 		p_config.success_color = Color(0.45, 0.95, 0.5);
 		p_config.warning_color = Color(1, 0.87, 0.4);
 		p_config.error_color = Color(1, 0.47, 0.42);
+		p_config.any_state_color = Color(0.5, 0.5, 1);
 		if (!p_config.dark_theme) {
 			// Darken some colors to be readable on a light background.
 			p_config.success_color = p_config.success_color.lerp(p_config.mono_color, 0.35);
 			p_config.warning_color = p_config.warning_color.lerp(p_config.mono_color, 0.35);
 			p_config.error_color = p_config.error_color.lerp(p_config.mono_color, 0.25);
+			p_config.any_state_color = p_config.any_state_color.lerp(p_config.mono_color, 0.25);
 		}
 
 		p_theme->set_color("mono_color", EditorStringName(Editor), p_config.mono_color);
@@ -2203,6 +2205,11 @@ void EditorThemeManager::_populate_editor_styles(const Ref<EditorTheme> &p_theme
 			sm_node_start_style->set_border_width_all(1 * EDSCALE);
 			sm_node_start_style->set_border_color(p_config.success_color.lightened(0.24));
 			p_theme->set_stylebox("node_frame_start", "GraphStateMachine", sm_node_start_style);
+
+			Ref<StyleBoxFlat> sm_node_any_state_style = sm_node_style->duplicate();
+			sm_node_any_state_style->set_border_width_all(1 * EDSCALE);
+			sm_node_any_state_style->set_border_color(p_config.any_state_color);
+			p_theme->set_stylebox("node_frame_any_state", "GraphStateMachine", sm_node_any_state_style);
 
 			Ref<StyleBoxFlat> sm_node_end_style = sm_node_style->duplicate();
 			sm_node_end_style->set_border_width_all(1 * EDSCALE);
