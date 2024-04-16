@@ -65,7 +65,7 @@ void AnimationNodeAnimation::_validate_property(PropertyInfo &p_property) const 
 }
 
 double AnimationNodeAnimation::_process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only) {
-	double cur_time = get_parameter(time);
+	double cur_time = cur_time_list[p_playback_info.id];
 
 	if (!process_state->tree->has_animation(animation)) {
 		AnimationNodeBlendTree *tree = Object::cast_to<AnimationNodeBlendTree>(node_state.parent);
@@ -176,9 +176,19 @@ double AnimationNodeAnimation::_process(const AnimationMixer::PlaybackInfo p_pla
 		pi.looped_flag = looped_flag;
 		blend_animation(animation, pi);
 	}
-	set_parameter(time, cur_time);
 
+	cur_time_list.set(p_playback_info.id, cur_time);
 	return is_looping ? HUGE_LENGTH : anim_size - cur_time;
+}
+
+void AnimationNodeAnimation::blend_start() {
+	cur_time_list.insert(0, 0.0);
+}
+
+void AnimationNodeAnimation::blend_end(const int p_index) {
+	if (cur_time_list.size() > 1) {
+		cur_time_list.remove_at(p_index);
+	}
 }
 
 String AnimationNodeAnimation::get_caption() const {
@@ -216,6 +226,8 @@ void AnimationNodeAnimation::_bind_methods() {
 }
 
 AnimationNodeAnimation::AnimationNodeAnimation() {
+	cur_time_list.clear();
+	cur_time_list.push_back(0.0);
 }
 
 ////////////////////////////////////////////////////////
@@ -571,8 +583,11 @@ double AnimationNodeAdd2::_process(const AnimationMixer::PlaybackInfo p_playback
 	AnimationMixer::PlaybackInfo pi = p_playback_info;
 	pi.weight = 1.0;
 	double rem0 = blend_input(0, pi, FILTER_IGNORE, sync, p_test_only);
+
 	pi.weight = amount;
-	blend_input(1, pi, FILTER_PASS, sync, p_test_only);
+	if (pi.weight > 0) {
+		blend_input(1, pi, FILTER_PASS, sync, p_test_only);
+	}
 
 	return rem0;
 }
@@ -608,11 +623,17 @@ double AnimationNodeAdd3::_process(const AnimationMixer::PlaybackInfo p_playback
 
 	AnimationMixer::PlaybackInfo pi = p_playback_info;
 	pi.weight = MAX(0, -amount);
-	blend_input(0, pi, FILTER_PASS, sync, p_test_only);
+	if (pi.weight > 0) {
+		blend_input(0, pi, FILTER_PASS, sync, p_test_only);
+	}
+
 	pi.weight = 1.0;
 	double rem0 = blend_input(1, pi, FILTER_IGNORE, sync, p_test_only);
+
 	pi.weight = MAX(0, amount);
-	blend_input(2, pi, FILTER_PASS, sync, p_test_only);
+	if (pi.weight > 0) {
+		blend_input(2, pi, FILTER_PASS, sync, p_test_only);
+	}
 
 	return rem0;
 }
@@ -669,11 +690,19 @@ double AnimationNodeBlend2::_process(const AnimationMixer::PlaybackInfo p_playba
 		amount = param.is_empty() ? get_parameter(blend_amount): get_animation_tree()->get_shared_parameter(param);
 	}
 
+	double rem0 = 0.0;
+	double rem1 = 0.0;
+
 	AnimationMixer::PlaybackInfo pi = p_playback_info;
 	pi.weight = 1.0 - amount;
-	double rem0 = blend_input(0, pi, FILTER_BLEND, sync, p_test_only);
+	if (pi.weight > 0.0) {
+		rem0 = blend_input(0, pi, FILTER_BLEND, sync, p_test_only);
+	}
+
 	pi.weight = amount;
-	double rem1 = blend_input(1, pi, FILTER_PASS, sync, p_test_only);
+	if (pi.weight > 0.0) {
+		rem1 = blend_input(1, pi, FILTER_PASS, sync, p_test_only);
+	}
 
 	return amount > 0.5 ? rem1 : rem0; // Hacky but good enough.
 }
@@ -737,13 +766,25 @@ double AnimationNodeBlend3::_process(const AnimationMixer::PlaybackInfo p_playba
 		amount = param.is_empty() ? get_parameter(blend_amount) : get_animation_tree()->get_shared_parameter(param);
 	}
 
+	double rem0 = 0.0;
+	double rem1 = 0.0;
+	double rem2 = 0.0;
+
 	AnimationMixer::PlaybackInfo pi = p_playback_info;
 	pi.weight = MAX(0, -amount);
-	double rem0 = blend_input(0, pi, FILTER_IGNORE, sync, p_test_only);
+	if (pi.weight > 0) {
+		rem0 = blend_input(0, pi, FILTER_IGNORE, sync, p_test_only);
+	}
+
 	pi.weight = 1.0 - ABS(amount);
-	double rem1 = blend_input(1, pi, FILTER_IGNORE, sync, p_test_only);
+	if (pi.weight > 0) {
+		rem1 = blend_input(1, pi, FILTER_IGNORE, sync, p_test_only);
+	}
+
 	pi.weight = MAX(0, amount);
-	double rem2 = blend_input(2, pi, FILTER_IGNORE, sync, p_test_only);
+	if (pi.weight > 0) {
+		rem2 = blend_input(2, pi, FILTER_IGNORE, sync, p_test_only);
+	}
 
 	return amount > 0.5 ? rem2 : (amount < -0.5 ? rem0 : rem1); // Hacky but good enough.
 }
@@ -1469,6 +1510,20 @@ double AnimationNodeBlendTree::_process(const AnimationMixer::PlaybackInfo p_pla
 	pi.weight = 1.0;
 
 	return _blend_node(output, "output", this, pi, FILTER_IGNORE, true, p_test_only, nullptr);
+}
+
+void AnimationNodeBlendTree::blend_start() {
+	Ref<AnimationNode> node = get_node("output");
+	ERR_FAIL_COND(node.is_null());
+	node->node_state.parent = this;
+	node->blend_start();
+}
+
+void AnimationNodeBlendTree::blend_end(const int p_index) {
+	Ref<AnimationNode> node = get_node("output");
+	ERR_FAIL_COND(node.is_null());
+	node->node_state.parent = this;
+	node->blend_end(p_index);
 }
 
 void AnimationNodeBlendTree::get_node_list(List<StringName> *r_list) {

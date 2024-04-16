@@ -40,6 +40,7 @@
 #include "editor/editor_undo_redo_manager.h"
 #include "editor/gui/editor_file_dialog.h"
 #include "editor/themes/editor_scale.h"
+#include "editor/editor_string_names.h"
 #include "scene/animation/animation_blend_tree.h"
 #include "scene/animation/animation_player.h"
 #include "scene/gui/menu_button.h"
@@ -48,6 +49,8 @@
 #include "scene/gui/panel_container.h"
 #include "scene/gui/separator.h"
 #include "scene/gui/tree.h"
+#include "scene/gui/texture_rect.h"
+#include "scene/gui/label.h"
 #include "scene/main/viewport.h"
 #include "scene/main/window.h"
 #include "scene/resources/style_box_flat.h"
@@ -205,6 +208,12 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 			}
 
 			if (node_rects[i].edit.has_point(mb->get_position())) { //edit name
+				if (node_rects[i].node_name == state_machine->any_state_node) {
+					// open pop up with anystate transitions (for re-ordering / firing triggers)
+					_show_any_state_transitions_window();
+					return;
+				}
+
 				callable_mp(this, &AnimationNodeStateMachineEditor::_open_editor).call_deferred(node_rects[i].node_name);
 				return;
 			}
@@ -774,6 +783,36 @@ void AnimationNodeStateMachineEditor::_delete_tree_draw() {
 	delete_window->get_cancel_button()->set_disabled(true);
 }
 
+void AnimationNodeStateMachineEditor::_show_any_state_transitions_window() {
+	any_state_transitions_tree->clear();
+	TreeItem *root = any_state_transitions_tree->create_item();
+
+	for (int i = 0; i < transition_lines.size(); ++i) {
+		if (transition_lines[i].from_node == state_machine->any_state_node) {
+			String from = transition_lines[i].from_node;
+			String to = transition_lines[i].to_node;
+
+			TreeItem *item = any_state_transitions_tree->create_item(root);
+			item->add_button(0, get_editor_theme_icon(SNAME("TripleBar")), 1);
+			item->add_button(2, get_editor_theme_icon(SNAME("Play")));
+
+			item->set_cell_mode(1, TreeItem::CELL_MODE_STRING);
+			item->set_text(1, "[" + itos(i + 1) + "] " + from + " -> " + to);
+			item->set_editable(1, false);
+
+			item->set_metadata(0, i);
+
+			item->set_selectable(0, false);
+			item->set_selectable(1, false);
+			item->set_selectable(2, false);
+		}
+	}
+
+	if (!any_state_transitions_window->is_visible()) {
+		any_state_transitions_window->popup_centered(Vector2(500, 350));
+	}
+}
+
 void AnimationNodeStateMachineEditor::_file_opened(const String &p_file) {
 	file_loaded = ResourceLoader::load(p_file);
 	if (file_loaded.is_valid()) {
@@ -1223,7 +1262,7 @@ void AnimationNodeStateMachineEditor::_state_machine_draw() {
 		offset.x += node_frame_style->get_offset().x;
 
 		if (state_machine->any_state_node == name) {
-			offset.x += (sep + theme_cache.play_node->get_width()) * 0.5;
+			needs_editor = true;
 		} else {
 			nr.play.position = offset + Vector2(0, (h - theme_cache.play_node->get_height()) / 2).floor();
 			nr.play.size = theme_cache.play_node->get_size();
@@ -1932,6 +1971,8 @@ AnimationNodeStateMachineEditor::AnimationNodeStateMachineEditor() {
 	open_file->set_file_mode(EditorFileDialog::FILE_MODE_OPEN_FILE);
 	open_file->connect("file_selected", callable_mp(this, &AnimationNodeStateMachineEditor::_file_opened));
 
+	// multi-transitions deletion confirm
+
 	delete_window = memnew(ConfirmationDialog);
 	delete_window->set_flag(Window::FLAG_RESIZE_DISABLED, true);
 	add_child(delete_window);
@@ -1947,7 +1988,133 @@ AnimationNodeStateMachineEditor::AnimationNodeStateMachineEditor() {
 
 	Button *delete_all = delete_window->add_button(TTR("Delete All"), true);
 	delete_all->connect("pressed", callable_mp(this, &AnimationNodeStateMachineEditor::_delete_all));
+
+	// any state transitions re-order
+
+	any_state_transitions_window = memnew(ConfirmationDialog);
+	any_state_transitions_window->set_title("Any State Transitions");
+	add_child(any_state_transitions_window);
+
+	any_state_transitions_tree = memnew(Tree);
+	any_state_transitions_tree->set_hide_root(true);
+	any_state_transitions_tree->set_columns(3);
+	any_state_transitions_tree->set_select_mode(Tree::SELECT_ROW);
+	any_state_transitions_tree->set_allow_reselect(false);
+	any_state_transitions_tree->add_theme_constant_override("button_margin", 0);
+	any_state_transitions_window->add_child(any_state_transitions_tree);
+
+	SET_DRAG_FORWARDING_GCD(any_state_transitions_tree, AnimationNodeStateMachineEditor);
+	any_state_transitions_tree->connect("button_clicked", callable_mp(this, &AnimationNodeStateMachineEditor::_any_state_button_pressed));
+	
+	ok = any_state_transitions_window->get_cancel_button();
+	ok->hide();
 }
+
+void AnimationNodeStateMachineEditor::_any_state_button_pressed(Object *p_item, int p_column, int p_id, MouseButton p_button) {
+	if (p_button != MouseButton::LEFT) {
+		return;
+	}
+
+	TreeItem *item = Object::cast_to<TreeItem>(p_item);
+	if (!item) {
+		return;
+	}
+
+	if (p_column != 2) {
+		return;
+	}
+
+	int transition_index = item->get_metadata(0);
+	if (transition_index >= 0 && transition_index < transition_lines.size()) {
+		StringName trigger = transition_lines[transition_index].advance_condition_name;
+		AnimationTree *tree = AnimationTreeEditor::get_singleton()->get_animation_tree();
+		if (tree) {
+			String trigger_name = trigger;
+			trigger = trigger_name.substr(trigger_name.find("/") + 1);
+			tree->set_trigger(trigger);
+		}
+	}
+}
+
+Variant AnimationNodeStateMachineEditor::get_drag_data_fw(const Point2 &p_point, Control *p_from) {
+	if (any_state_transitions_tree->get_button_id_at_position(p_point) != 1) {
+		return Variant(); //not dragging from button
+	}
+
+	TreeItem *selected_node = any_state_transitions_tree->get_item_at_position(p_point);
+	
+	if (!selected_node) {
+		return Variant();
+	}
+
+	VBoxContainer *vb = memnew(VBoxContainer);
+	int list_max = 10;
+	float opacity_step = 1.0f / list_max;
+	float opacity_item = 1.0f;
+	HBoxContainer *hb = memnew(HBoxContainer);
+	TextureRect *tf = memnew(TextureRect);
+	int icon_size = get_theme_constant(SNAME("class_icon_size"), EditorStringName(Editor));
+	tf->set_custom_minimum_size(Size2(icon_size, icon_size));
+	tf->set_stretch_mode(TextureRect::STRETCH_KEEP_ASPECT_CENTERED);
+	tf->set_expand_mode(TextureRect::EXPAND_IGNORE_SIZE);
+	hb->add_child(tf);
+	Label *label = memnew(Label(selected_node->get_text(1)));
+	hb->add_child(label);
+	vb->add_child(hb);
+	hb->set_modulate(Color(1, 1, 1, opacity_item));
+	opacity_item -= opacity_step;
+
+	Dictionary drag_data;
+	drag_data["type"] = "transition_index";
+	drag_data["transition_index"] = selected_node->get_metadata(0);
+
+	any_state_transitions_tree->set_drop_mode_flags(Tree::DROP_MODE_INBETWEEN);
+
+	return drag_data;
+}
+
+bool AnimationNodeStateMachineEditor::can_drop_data_fw(const Point2 &p_point, const Variant &p_data, Control *p_from) const {
+	if (!any_state_transitions_window->is_visible()) {
+		return false;
+	}
+
+	return true;
+}
+
+void AnimationNodeStateMachineEditor::drop_data_fw(const Point2 &p_point, const Variant &p_data, Control *p_from) {
+	if (!can_drop_data_fw(p_point, p_data, p_from)) {
+		return;
+	}
+
+	TreeItem *item = any_state_transitions_tree->get_item_at_position(p_point);
+	if (!item) {
+		return;
+	}
+	int section = any_state_transitions_tree->get_drop_section_at_position(p_point);
+	if (section < -1) {
+		return;
+	}
+
+	int transition_index = item->get_metadata(0);
+	if (transition_index < 0) {
+		return;
+	}
+
+	Dictionary d = p_data;
+
+	if (String(d["type"]) == "transition_index") {
+		int drop_index = d["transition_index"];
+		state_machine->swap_transitions(drop_index, transition_index);
+
+		TransitionLine tl = transition_lines[drop_index];
+		transition_lines.set(drop_index, transition_lines[transition_index]);
+		transition_lines.set(transition_index, tl);
+
+		_show_any_state_transitions_window();
+	}
+}
+
+////////////////////
 
 void EditorAnimationMultiTransitionEdit::add_transition(const StringName &p_from, const StringName &p_to, Ref<AnimationNodeStateMachineTransition> p_transition) {
 	Transition tr;

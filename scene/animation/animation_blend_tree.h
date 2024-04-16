@@ -41,6 +41,7 @@ class AnimationNodeAnimation : public AnimationRootNode {
 
 	uint64_t last_version = 0;
 	bool skip = false;
+	Vector<double> cur_time_list;
 
 public:
 	enum PlayMode {
@@ -54,6 +55,8 @@ public:
 
 	virtual String get_caption() const override;
 	virtual double _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
+	virtual void blend_start() override;
+	virtual void blend_end(const int p_index) override;
 
 	void set_animation(const StringName &p_name);
 	StringName get_animation() const;
@@ -457,6 +460,8 @@ public:
 
 	virtual String get_caption() const override;
 	virtual double _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
+	virtual void blend_start() override;
+	virtual void blend_end(const int p_index) override;
 
 	void get_node_list(List<StringName> *r_list);
 

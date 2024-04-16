@@ -296,7 +296,7 @@ bool AnimationNodeStateMachinePlayback::is_playing() const {
 }
 
 bool AnimationNodeStateMachinePlayback::is_end() const {
-	return current == "End" && fading_from == StringName();
+	return current == "End" && fading_blends.size() == 0;
 }
 
 StringName AnimationNodeStateMachinePlayback::get_current_node() const {
@@ -304,7 +304,7 @@ StringName AnimationNodeStateMachinePlayback::get_current_node() const {
 }
 
 StringName AnimationNodeStateMachinePlayback::get_fading_from_node() const {
-	return fading_from;
+	return fading_blends.size() > 0 ? fading_blends.last().fading_from : StringName();
 }
 
 Vector<StringName> AnimationNodeStateMachinePlayback::get_travel_path() const {
@@ -332,11 +332,11 @@ float AnimationNodeStateMachinePlayback::get_fade_from_length() const {
 }
 
 float AnimationNodeStateMachinePlayback::get_fading_time() const {
-	return fading_time;
+	return fading_blends.size() > 0 ? fading_blends.last().fading_time : 0.0;
 }
 
 float AnimationNodeStateMachinePlayback::get_fading_pos() const {
-	return fading_pos;
+	return fading_blends.size() > 0 ? fading_blends.last().fading_pos : 0.0;
 }
 
 void AnimationNodeStateMachinePlayback::_clear_path_children(AnimationTree *p_tree, AnimationNodeStateMachine *p_state_machine, bool p_test_only) {
@@ -781,9 +781,11 @@ double AnimationNodeStateMachinePlayback::_process(const String &p_base_path, An
 
 	if (teleport_request) {
 		teleport_request = false;
-		// Clear fadeing on teleport.
-		fading_from = StringName();
-		fading_pos = 0;
+		// Clear fading on teleport.
+		for (int i = 0; i < fading_blends.size(); ++i) {
+			p_state_machine->states[fading_blends[i].fading_from].node->blend_end(0);
+		}
+		fading_blends.clear();
 		// Init current length.
 		pos_current = 0; // Overwritten suddenly in main process.
 
@@ -808,20 +810,25 @@ double AnimationNodeStateMachinePlayback::_process(const String &p_base_path, An
 	bool is_start_of_group = false;
 	bool is_end_of_group = false;
 	if (!p_state_machine->are_ends_reset() || p_state_machine->get_state_machine_type() == AnimationNodeStateMachine::STATE_MACHINE_TYPE_GROUPED) {
-		is_start_of_group = fading_from == p_state_machine->start_node;
+		is_start_of_group = get_fading_from_node() == p_state_machine->start_node;
 		is_end_of_group = current == p_state_machine->end_node;
 	}
 
 	// Calc blend amount by cross-fade.
 	float fade_blend = 1.0;
-	if (fading_time && fading_from != StringName()) {
-		if (!p_state_machine->states.has(fading_from)) {
-			fading_from = StringName();
-		} else {
-			if (!p_seek) {
-				fading_pos += p_time;
+	if (fading_blends.size() > 0) {
+		if (!p_state_machine->states.has(get_fading_from_node())) {
+			for (int i = 0; i < fading_blends.size(); ++i) {
+				p_state_machine->states[fading_blends[i].fading_from].node->blend_end(0);
 			}
-			fade_blend = MIN(1.0, fading_pos / fading_time);
+			fading_blends.clear();
+		} else {
+			FadingBlend blend = fading_blends.last();
+			if (!p_seek) {
+				blend.fading_pos += p_time;
+				fading_blends.set(fading_blends.size() - 1, blend);
+			}
+			fade_blend = MIN(1.0, blend.fading_pos / blend.fading_time);
 		}
 	}
 	if (current_curve.is_valid()) {
@@ -834,7 +841,7 @@ double AnimationNodeStateMachinePlayback::_process(const String &p_base_path, An
 		fade_blend = 0.0;
 	}
 
-	// Main process.
+	// Main process / current state playback
 	double rem = 0.0;
 	pi = p_playback_info;
 	pi.weight = fade_blend;
@@ -848,46 +855,92 @@ double AnimationNodeStateMachinePlayback::_process(const String &p_base_path, An
 		rem = p_state_machine->blend_node(p_state_machine->states[current].node, current, pi, AnimationNode::FILTER_IGNORE, true, p_test_only); // Blend values must be more than CMP_EPSILON to process discrete keys in edge.
 	}
 
-	// TODO add any number of ongoing fades here, so we should have a queue of fade infos ((A->B)->C)->D
-	// D blend is handled just above
-	// C blend is handled here
-	// B blend is handled here
-	// A blend is handled here
-	// if the C blend completes it will remove A and B blends as well
-	// if the B blend completes it just removes the A blend as per normal
-	// # therefore we should process backwards through the queue, C does its blend with its fade time and the remainder gets passed onto A->B blend as a time remainder multiplier
-	// # the time remainder multiplier should continue to propagate (each time further being multiplied by current time remainder) until it reaches the start of the queue
-	// Cross-fade process.
-	if (fading_from != StringName()) {
-		double fade_blend_inv = 1.0 - fade_blend;
-		fade_blend_inv = Math::is_zero_approx(fade_blend_inv) ? CMP_EPSILON : fade_blend_inv;
-		if (is_start_of_group) {
-			fade_blend_inv = 0.0;
-		} else if (is_end_of_group) {
-			fade_blend_inv = 1.0;
+	// any number of ongoing fades are processed here, we should have a list of fading_blends ((A->B)->C)->D
+	if (fading_blends.size() > 0) {
+		double fade_total = 1.0;
+		FadingBlend blend;
+
+		fading_blend_count.clear();
+		fading_blend_count[current] = 0;
+
+		// calculate weights for each blend
+		for (int i = fading_blends.size() - 1; i >= 0; --i) {
+			blend = fading_blends[i];
+
+			if (i < fading_blends.size() - 1) {
+				blend.fading_pos += p_time;
+
+				fade_blend = MIN(1.0, blend.fading_pos / blend.fading_time);
+				if (current_curve.is_valid()) {
+					fade_blend = current_curve->sample(fade_blend);
+				}
+
+				fade_blend = fade_blend * fade_total;
+			}
+			
+			fade_total = fade_total - fade_blend;
+			blend.fade_total = fade_total;
+
+			fading_blends.set(i, blend);
 		}
 
-		float fading_from_rem = 0.0;
-		pi = p_playback_info;
-		pi.weight = fade_blend_inv;
-		if (_reset_request_for_fading_from) {
-			_reset_request_for_fading_from = false;
-			pi.time = 0;
-			pi.seeked = true;
-		}
-		fading_from_rem = p_state_machine->blend_node(p_state_machine->states[fading_from].node, fading_from, pi, AnimationNode::FILTER_IGNORE, true, p_test_only); // Blend values must be more than CMP_EPSILON to process discrete keys in edge.
+		// process blends
+		for (int i = fading_blends.size() - 1; i >= 0; --i) {
+			if (i > 0) {
+				blend = fading_blends[i - 1];
 
-		// Guess playback position.
-		if (fading_from_rem > len_fade_from) { /// Weird but ok.
-			len_fade_from = fading_from_rem;
-		}
-		pos_fade_from = len_fade_from - fading_from_rem;
+				fade_blend = MIN(1.0, blend.fading_pos / blend.fading_time);
+				if (current_curve.is_valid()) {
+					fade_blend = current_curve->sample(fade_blend);
+				}
+				fade_blend = fade_blend * fading_blends[i].fade_total;
+			} else {
+				fade_blend = fading_blends[i].fade_total;
+			}
 
-		if (fading_pos >= fading_time) {
-			fading_from = StringName(); // Finish fading.
+			blend = fading_blends[i];
+			pi = p_playback_info;
+			
+			if (!fading_blend_count.has(blend.fading_from)) {
+				fading_blend_count[blend.fading_from] = 0;
+			} else {
+				fading_blend_count[blend.fading_from]++;
+			}
+			pi.id = fading_blend_count[blend.fading_from]; // pass in id for which cur_time the AnimationNodeAnimation should use, the greater the index the older the playback
+
+			pi.weight = fade_blend;
+			if (_reset_request_for_fading_from) {
+				_reset_request_for_fading_from = false;
+				pi.time = 0;
+				pi.seeked = true;
+			}
+			float fading_from_rem = p_state_machine->blend_node(p_state_machine->states[blend.fading_from].node, blend.fading_from, pi, AnimationNode::FILTER_IGNORE, true, p_test_only); // Blend values must be more than CMP_EPSILON to process discrete keys in edge.
+
+			if (i == fading_blends.size() - 1) {
+				if (fading_from_rem > len_fade_from) { /// Weird but ok.
+					len_fade_from = fading_from_rem;
+				}
+				pos_fade_from = len_fade_from - fading_from_rem;
+			}
+
+			// don't think this matters too much for multiple blends going on at the same time (as doing it once above should be enough)
+			/*if (is_start_of_group) {
+				fade_total = 0.0;
+			} else if (is_end_of_group) {
+				fade_total = 1.0;
+			}*/
+
+			if (blend.fading_pos >= blend.fading_time) {
+				// if this blend is done
+				while (i >= 0) {
+					p_state_machine->states[fading_blends[i].fading_from].node->blend_end(fading_blend_count[fading_blends[i].fading_from]); // pass in id / index for which cur_time the AnimationNodeAnimation should remove
+					fading_blends.remove_at(i); // Finish fading.
+					--i;
+				}
+			}
 		}
 	}
-
+	
 	// Guess playback position.
 	if (rem > len_current) { // Weird but ok.
 		len_current = rem;
@@ -903,8 +956,8 @@ double AnimationNodeStateMachinePlayback::_process(const String &p_base_path, An
 	if (p_state_machine->get_state_machine_type() == AnimationNodeStateMachine::STATE_MACHINE_TYPE_NESTED) {
 		// There is no next transition.
 		if (!p_state_machine->has_transition_from(current)) {
-			if (fading_from != StringName()) {
-				remain = MAX(rem, fading_time - fading_pos);
+			if (fading_blends.size() > 0) {
+				remain = MAX(rem, fading_blends.last().fading_time - fading_blends.last().fading_pos);
 			} else {
 				remain = rem;
 			}
@@ -913,8 +966,8 @@ double AnimationNodeStateMachinePlayback::_process(const String &p_base_path, An
 	}
 
 	if (current == p_state_machine->end_node) {
-		if (fading_from != StringName()) {
-			remain = MAX(0, fading_time - fading_pos);
+		if (fading_blends.size() > 0) {
+			remain = MAX(0, fading_blends.last().fading_time - fading_blends.last().fading_pos);
 		} else {
 			remain = 0;
 		}
@@ -938,6 +991,7 @@ bool AnimationNodeStateMachinePlayback::_transition_to_next_recursive(AnimationT
 	Vector<StringName> transition_path;
 	transition_path.push_back(current);
 	while (true) {
+		bool transition_to_same = false;
 		next = _find_next(p_tree, p_state_machine);
 
 		if (!_can_transition_to_next(p_tree, p_state_machine, next, p_test_only)) {
@@ -945,19 +999,42 @@ bool AnimationNodeStateMachinePlayback::_transition_to_next_recursive(AnimationT
 		}
 
 		if (transition_path.has(next.node)) {
-			WARN_PRINT_ONCE_ED("AnimationNodeStateMachinePlayback: " + base_path + "playback aborts the transition by detecting one or more looped transitions in the same frame to prevent to infinity loop. You may need to check the transition settings.");
-			break; // Maybe infinity loop, do nothing more.
+			transition_to_same = true;
+
+			// we only want to disallow transition from current state back to itself if the any state triggers are not active; as a state set to blend back to itself via any state is allowed
+			if (!p_tree->any_triggers_active()) {
+				WARN_PRINT_ONCE_ED("AnimationNodeStateMachinePlayback: " + base_path + "playback aborts the transition by detecting one or more looped transitions in the same frame to prevent to infinity loop. You may need to check the transition settings.");
+				break; // Maybe infinity loop, do nothing more.
+			}
 		}
 
 		transition_path.push_back(next.node);
 		is_state_changed = true;
+		bool found_target_state;
+		FadingBlend blend;
 
 		// Setting for fading.
 		if (next.xfade) {
+			// allow multiple playbacks of the same animation / node
+			if (next.node == current) {
+				p_state_machine->states[current].node->blend_start();
+			} else {
+				for (int i = 0; i < fading_blends.size(); ++i) {
+					if (fading_blends[i].fading_from == next.node) {
+						p_state_machine->states[next.node].node->blend_start();
+						break;
+					}
+				}
+			}
+
 			// Time to fade.
-			fading_from = current;
-			fading_time = next.xfade;
-			fading_pos = 0;
+			found_target_state = true;
+
+			// push new fade / blend state to fading_blends vector
+			blend.fading_from = current;
+			blend.fading_time = next.xfade;
+			blend.fading_pos = 0;
+			fading_blends.push_back(blend);
 		} else {
 			if (reset_request) {
 				// There is no possibility of processing doubly. Now we can apply reset actually in here.
@@ -967,9 +1044,14 @@ bool AnimationNodeStateMachinePlayback::_transition_to_next_recursive(AnimationT
 				pi.weight = 0;
 				p_state_machine->blend_node(p_state_machine->states[current].node, current, pi, AnimationNode::FILTER_IGNORE, true, p_test_only);
 			}
-			fading_from = StringName();
-			fading_time = 0;
-			fading_pos = 0;
+
+			// clear fading_blends
+			for (int i = 0; i < fading_blends.size(); ++i) {
+				p_state_machine->states[fading_blends[i].fading_from].node->blend_end(0);
+			}
+			fading_blends.clear();
+
+			found_target_state = transition_to_same;
 		}
 
 		// If it came from path, remove path.
@@ -981,7 +1063,7 @@ bool AnimationNodeStateMachinePlayback::_transition_to_next_recursive(AnimationT
 		_set_current(p_state_machine, next.node);
 		current_curve = next.curve;
 
-		_reset_request_for_fading_from = reset_request; // To avoid processing doubly, it must be reset in the fading process within _process().
+		_reset_request_for_fading_from = reset_request && !transition_to_same; // To avoid processing doubly, it must be reset in the fading process within _process().
 		reset_request = next.is_reset;
 
 		pos_fade_from = pos_current;
@@ -1000,6 +1082,7 @@ bool AnimationNodeStateMachinePlayback::_transition_to_next_recursive(AnimationT
 		pi.time = 0;
 		pi.is_external_seeking = false;
 		pi.weight = 0;
+
 		if (next.is_reset) {
 			pi.seeked = true;
 			len_current = p_state_machine->blend_node(p_state_machine->states[current].node, current, pi, AnimationNode::FILTER_IGNORE, true, true); // Just retrieve remain length, don't process.
@@ -1016,7 +1099,7 @@ bool AnimationNodeStateMachinePlayback::_transition_to_next_recursive(AnimationT
 		pos_current = len_current - rem;
 
 		// Fading must be processed.
-		if (fading_time) {
+		if (found_target_state) {
 			break;
 		}
 	}
@@ -1028,6 +1111,8 @@ bool AnimationNodeStateMachinePlayback::_can_transition_to_next(AnimationTree *p
 	if (p_next.node == StringName()) {
 		return false;
 	}
+
+	bool found_next = false;
 
 	if (next_request) {
 		// Process request only once.
@@ -1042,15 +1127,18 @@ bool AnimationNodeStateMachinePlayback::_can_transition_to_next(AnimationTree *p
 				playback = playback->duplicate();
 			}
 			playback->_next_main();
-			// Then, fadeing should be end.
-			fading_from = StringName();
-			fading_pos = 0;
+			// Then, fading should end.
+			for (int i = 0; i < fading_blends.size(); ++i) {
+				p_state_machine->states[fading_blends[i].fading_from].node->blend_end(0);
+			}
+			fading_blends.clear();
+			found_next = true;
 		} else {
 			return true;
 		}
 	}
 
-	if (fading_from != StringName()) {
+	if (found_next) {
 		return false;
 	}
 
@@ -1120,6 +1208,13 @@ AnimationNodeStateMachinePlayback::NextInfo AnimationNodeStateMachinePlayback::_
 			}
 		}
 
+		StringName tr_to;
+		AnimationNodeStateMachine::Transition tr_transition;
+		if (auto_advance_to != -1) {
+			tr_to = current_transitions[auto_advance_to].to;
+			tr_transition = current_transitions[auto_advance_to];
+		}
+
 		if (p_tree->any_triggers_active()) {
 			// check AnyState transitions (these always take priority over current_transitions)
 			if (p_state_machine->transitions_by_node.has("Any State")) {
@@ -1133,21 +1228,26 @@ AnimationNodeStateMachinePlayback::NextInfo AnimationNodeStateMachinePlayback::_
 					if (ref_transition->get_advance_mode() == AnimationNodeStateMachineTransition::ADVANCE_MODE_DISABLED) {
 						continue;
 					}
-					if (_check_advance_condition(anodesm, ref_transition) || bypass) {
+					if (_check_any_state_condition(anodesm, ref_transition) || bypass) {
 						if (ref_transition->get_priority() <= any_priority_best) {
 							any_priority_best = ref_transition->get_priority();
 							auto_advance_to = i;
 						}
 					}
 				}
+
+				if (auto_advance_to != -1) {
+					tr_to = any_transitions[auto_advance_to].to;
+					tr_transition = any_transitions[auto_advance_to];
+				}
 			}
 		}
 
 		if (auto_advance_to != -1) {
-			next.node = current_transitions[auto_advance_to].to;
+			next.node = tr_to;
 			Ref<AnimationNodeStateMachine> anodesm = p_state_machine;
 			bool bypass = false;
-			Ref<AnimationNodeStateMachineTransition> ref_transition = _check_group_transition(p_tree, p_state_machine, current_transitions[auto_advance_to], anodesm, bypass);
+			Ref<AnimationNodeStateMachineTransition> ref_transition = _check_group_transition(p_tree, p_state_machine, tr_transition, anodesm, bypass);
 			next.xfade = ref_transition->get_xfade_time();
 			next.curve = ref_transition->get_xfade_curve();
 			next.switch_mode = ref_transition->get_switch_mode();
@@ -1173,6 +1273,37 @@ bool AnimationNodeStateMachinePlayback::_check_advance_condition(const Ref<Anima
 		AnimationTree *tree_base = state_machine->get_animation_tree();
 		ERR_FAIL_NULL_V(tree_base, false);
 
+		NodePath advance_expression_base_node_path = tree_base->get_advance_expression_base_node();
+		Node *expression_base = tree_base->get_node_or_null(advance_expression_base_node_path);
+
+		if (expression_base) {
+			Ref<Expression> exp = transition->expression;
+			bool ret = exp->execute(Array(), expression_base, false, Engine::get_singleton()->is_editor_hint()); // Avoids allowing the user to crash the system with an expression by only allowing const calls.
+			if (exp->has_execute_failed() || !ret) {
+				return false;
+			}
+		} else {
+			WARN_PRINT_ONCE("Animation transition has a valid expression, but no expression base node was set on its AnimationTree.");
+		}
+	}
+
+	return true;
+}
+
+bool AnimationNodeStateMachinePlayback::_check_any_state_condition(const Ref<AnimationNodeStateMachine> state_machine, const Ref<AnimationNodeStateMachineTransition> transition) const {
+	if (transition->get_advance_mode() != AnimationNodeStateMachineTransition::ADVANCE_MODE_AUTO) {
+		return false;
+	}
+
+	StringName trigger = transition->get_advance_condition();
+	AnimationTree *tree_base = state_machine->get_animation_tree();
+	ERR_FAIL_NULL_V(tree_base, false);
+
+	if (!tree_base->has_trigger(trigger)) {
+		return false;
+	}
+
+	if (transition->expression.is_valid()) {
 		NodePath advance_expression_base_node_path = tree_base->get_advance_expression_base_node();
 		Node *expression_base = tree_base->get_node_or_null(advance_expression_base_node_path);
 
@@ -1263,6 +1394,8 @@ void AnimationNodeStateMachinePlayback::_bind_methods() {
 AnimationNodeStateMachinePlayback::AnimationNodeStateMachinePlayback() {
 	set_local_to_scene(true); // Only one per instantiated scene.
 	no_transitions.clear();
+	fading_blends.clear();
+	fading_blend_count.clear();
 	current_transitions = no_transitions;
 	default_transition.instantiate();
 	default_transition->set_xfade_time(0);
@@ -1278,7 +1411,7 @@ void AnimationNodeStateMachine::get_parameter_list(List<PropertyInfo> *r_list) c
 	List<StringName> advance_conditions;
 	for (int i = 0; i < transitions.size(); i++) {
 		StringName ac = transitions[i].transition->get_advance_condition_name();
-		if (ac != StringName() && advance_conditions.find(ac) == nullptr) {
+		if (ac != StringName() && advance_conditions.find(ac) == nullptr && transitions[i].from != any_state_node) {
 			advance_conditions.push_back(ac);
 		}
 	}
@@ -1743,6 +1876,12 @@ void AnimationNodeStateMachine::remove_transition(const StringName &p_from, cons
 	}
 }
 
+void AnimationNodeStateMachine::swap_transitions(const int p_from, const int p_to) {
+	Transition tr = transitions[p_from];
+	transitions.set(p_from, transitions[p_to]);
+	transitions.set(p_to, tr);
+}
+
 void AnimationNodeStateMachine::remove_transition_by_index(const int p_transition) {
 	remove_transition_by_index_node(p_transition, true);
 }
@@ -1800,6 +1939,20 @@ double AnimationNodeStateMachine::_process(const AnimationMixer::PlaybackInfo p_
 		playback_new = playback_new->duplicate(); // Don't process original when testing.
 	}
 	return playback_new->process(node_state.base_path, this, p_playback_info, p_test_only);
+}
+
+void AnimationNodeStateMachine::blend_start() {
+	WARN_PRINT("Blending from a state machine back to itself in a parent state machine using the AnyState is not recommended, strange behaviour will arise.");
+	for (const KeyValue<StringName, State> &E : states) {
+		E.value.node->blend_start();
+	}
+}
+
+void AnimationNodeStateMachine::blend_end(const int p_index) {
+	WARN_PRINT("Blending from a state machine back to itself in a parent state machine using the AnyState is not recommended, strange behaviour will arise.");
+	for (const KeyValue<StringName, State> &E : states) {
+		E.value.node->blend_end(p_index);
+	}
 }
 
 String AnimationNodeStateMachine::get_caption() const {

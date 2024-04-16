@@ -89,6 +89,7 @@ public:
 		Animation::LoopedFlag looped_flag = Animation::LOOPED_FLAG_NONE;
 		real_t weight = 0.0;
 		Vector<real_t> track_weights;
+		int id = 0;
 	};
 
 	struct AnimationInstance {
@@ -405,7 +406,8 @@ public:
 	void set_deterministic(bool p_deterministic);
 	bool is_deterministic() const;
 
-	void set_root_node(const NodePath &p_path, bool emit_signal = true);
+	void set_root_node(const NodePath &p_path);
+	void set_root_node_emit(const NodePath &p_path, bool emit_signal);
 	NodePath get_root_node() const;
 
 	void set_callback_mode_process(AnimationCallbackModeProcess p_mode);

@@ -450,7 +450,11 @@ bool AnimationMixer::is_active() const {
 	return active;
 }
 
-void AnimationMixer::set_root_node(const NodePath &p_path, bool emit_signal) {
+void AnimationMixer::set_root_node(const NodePath &p_path) {
+	set_root_node_emit(p_path, true);
+}
+
+void AnimationMixer::set_root_node_emit(const NodePath &p_path, bool emit_signal) {
 	root_node = p_path;
 	_clear_caches(emit_signal);
 }

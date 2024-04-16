@@ -201,6 +201,7 @@ public:
 	void remove_transition_by_index_node(const int p_transition, bool remove_by_node);
 	void remove_multi_transition(const StringName &p_from, const StringName &p_to, int index);
 	void remove_transition(const StringName &p_from, const StringName &p_to);
+	void swap_transitions(const int p_from, const int p_to);
 
 	void set_state_machine_type(StateMachineType p_state_machine_type);
 	StateMachineType get_state_machine_type() const;
@@ -217,6 +218,8 @@ public:
 	Vector2 get_graph_offset() const;
 
 	virtual double _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
+	virtual void blend_start() override;
+	virtual void blend_end(const int p_index) override;
 	virtual String get_caption() const override;
 
 	virtual Ref<AnimationNode> get_child_by_name(const StringName &p_name) const override;
@@ -260,6 +263,14 @@ class AnimationNodeStateMachinePlayback : public Resource {
 		bool is_reset = false;
 	};
 
+	struct FadingBlend {
+		StringName fading_from;
+		float fading_time = 0.0;
+		float fading_pos = 0.0;
+		float fade_total = 0.0;
+		//int fading_time_id = 0;
+	};
+
 	Ref<AnimationNodeStateMachineTransition> default_transition;
 	String base_path;
 
@@ -277,9 +288,16 @@ class AnimationNodeStateMachinePlayback : public Resource {
 	Ref<AnimationNodeStateMachineTransition> group_start_transition;
 	Ref<AnimationNodeStateMachineTransition> group_end_transition;
 
-	StringName fading_from;
-	float fading_time = 0.0;
-	float fading_pos = 0.0;
+	Vector<FadingBlend> fading_blends;
+	HashMap<StringName, int> fading_blend_count;
+	//StringName fading_from;
+	//float fading_time = 0.0;
+	//float fading_pos = 0.0;
+	//int blend_id = 0;
+	//int next_id() {
+	//	blend_id = blend_id + 1 % 100000;
+	//	return blend_id;
+	//}
 
 	Vector<StringName> path;
 	bool playing = false;
@@ -313,6 +331,7 @@ class AnimationNodeStateMachinePlayback : public Resource {
 	double _process(const String &p_base_path, AnimationNodeStateMachine *p_state_machine, const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only);
 
 	bool _check_advance_condition(const Ref<AnimationNodeStateMachine> p_state_machine, const Ref<AnimationNodeStateMachineTransition> p_transition) const;
+	bool _check_any_state_condition(const Ref<AnimationNodeStateMachine> p_state_machine, const Ref<AnimationNodeStateMachineTransition> p_transition) const;
 	bool _transition_to_next_recursive(AnimationTree *p_tree, AnimationNodeStateMachine *p_state_machine, bool p_test_only);
 	NextInfo _find_next(AnimationTree *p_tree, AnimationNodeStateMachine *p_state_machine) const;
 	Ref<AnimationNodeStateMachineTransition> _check_group_transition(AnimationTree *p_tree, AnimationNodeStateMachine *p_state_machine, const AnimationNodeStateMachine::Transition &p_transition, Ref<AnimationNodeStateMachine> &r_state_machine, bool &r_bypass) const;

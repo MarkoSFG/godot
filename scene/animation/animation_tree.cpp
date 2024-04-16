@@ -104,6 +104,53 @@ void AnimationNode::get_child_nodes(List<ChildNode> *r_child_nodes) {
 	}
 }
 
+void AnimationNode::blend_start() {
+	AnimationNodeBlendTree *blend_tree = Object::cast_to<AnimationNodeBlendTree>(node_state.parent);
+	ERR_FAIL_NULL(blend_tree);
+
+	for (int i = 0; i < inputs.size(); ++i) {
+		// Update connections.
+		StringName current_name = blend_tree->get_node_name(Ref<AnimationNode>(this));
+		node_state.connections = blend_tree->get_node_connection_array(current_name);
+
+		for (int m = 0; m < node_state.connections.size(); ++m) {
+			// Get node which is connected input port.
+			StringName node_name = node_state.connections[m];
+			ERR_CONTINUE_MSG(!blend_tree->has_node(node_name), vformat(RTR("Nothing connected to input '%s' of node '%s'."), get_input_name(m), current_name));
+
+			Ref<AnimationNode> node = blend_tree->get_node(node_name);
+			ERR_CONTINUE(node.is_null());
+
+			node->blend_start();
+		}
+	}
+}
+
+void AnimationNode::blend_end(const int p_index) {
+	AnimationNodeBlendTree *blend_tree = Object::cast_to<AnimationNodeBlendTree>(node_state.parent);
+	ERR_FAIL_NULL(blend_tree);
+
+	for (int i = 0; i < inputs.size(); ++i) {
+		// Update connections.
+		StringName current_name = blend_tree->get_node_name(Ref<AnimationNode>(this));
+		node_state.connections = blend_tree->get_node_connection_array(current_name);
+
+		for (int m = 0; m < node_state.connections.size(); ++m) {
+			// Get node which is connected input port.
+			StringName node_name = node_state.connections[m];
+			ERR_CONTINUE_MSG(!blend_tree->has_node(node_name), vformat(RTR("Nothing connected to input '%s' of node '%s'."), get_input_name(m), current_name));
+			if (!blend_tree->has_node(node_name)) {
+				continue;
+			}
+
+			Ref<AnimationNode> node = blend_tree->get_node(node_name);
+			ERR_CONTINUE(node.is_null());
+
+			node->blend_end(p_index);
+		}
+	}
+}
+
 void AnimationNode::blend_animation(const StringName &p_animation, AnimationMixer::PlaybackInfo p_playback_info) {
 	ERR_FAIL_NULL(process_state);
 	p_playback_info.track_weights = node_state.track_weights;
@@ -523,6 +570,13 @@ void AnimationRootNode::_animation_node_removed(const ObjectID &p_oid, const Str
 
 ////////////////////
 
+void AnimationNodeAnyState::get_parameter_list(List<PropertyInfo> *r_list) const {
+	Variant temp_v = Variant(5);
+	r_list->push_back(PropertyInfo(Variant::FLOAT, temp_v, PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE));
+}
+
+////////////////////
+
 void AnimationTree::set_root_animation_node(const Ref<AnimationRootNode> &p_animation_node) {
 	if (root_animation_node.is_valid()) {
 		root_animation_node->disconnect(SNAME("tree_changed"), callable_mp(this, &AnimationTree::_tree_changed));
@@ -601,9 +655,6 @@ bool AnimationTree::_blend_pre_process(double p_delta, int p_track_count, const 
 void AnimationTree::_blend_post_process() {
 	if (triggers_active) {
 		triggers_active = false;
-		for (int i = 0; i < active_triggers.size(); ++i) {
-			set(active_triggers[i], false);
-		}
 		active_triggers.clear();
 	}
 }
@@ -626,8 +677,10 @@ void AnimationTree::set_shared_parameter(const StringName &p_name, const Variant
 }
 
 Variant AnimationTree::get_shared_parameter(const StringName &p_name) const {
-	ERR_FAIL_COND_V(!shared_property_map.has(p_name), Variant());
-	return shared_property_map[p_name];
+	// just return 0 if no value has been set
+	// alternatively we could populate all the shared properties and set them to 0 depending on what has been used in child nodes? Even then it's probably better to leave it like this
+	//ERR_FAIL_COND_V_MSG(!shared_property_map.has(p_name), Variant(), String(p_name) + " not found in shared_property_map.");
+	return shared_property_map.has(p_name) ? shared_property_map[p_name] : Variant(0.0f);
 }
 
 bool AnimationTree::has_shared_parameter(const StringName &p_name) const {
@@ -655,16 +708,16 @@ Dictionary AnimationTree::get_shared_parameters() const {
 	return ret;
 }
 
+bool AnimationTree::has_trigger(const StringName& p_name) {
+	return active_triggers.has(p_name);
+}
+
 void AnimationTree::set_trigger(const StringName& p_name) {
 	triggers_active = true;
-	set(p_name, true);
-	if (!active_triggers.has(p_name)) {
-		active_triggers.push_back(p_name);
-	}
+	active_triggers[p_name] = true;
 }
 
 void AnimationTree::reset_trigger(const StringName& p_name) {
-	set(p_name, false);
 	active_triggers.erase(p_name);
 }
 
@@ -866,7 +919,7 @@ void AnimationTree::_setup_animation_player() {
 		}
 		Node *root = player->get_node_or_null(player->get_root_node());
 		if (root) {
-			set_root_node(get_path_to(root, true), false);
+			set_root_node_emit(get_path_to(root, true), false);
 		}
 		while (animation_libraries.size()) {
 			remove_animation_library(animation_libraries[0].name, false);

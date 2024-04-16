@@ -95,6 +95,7 @@ public:
 	Error resize(Size p_size) { return _cowdata.resize(p_size); }
 	Error resize_zeroed(Size p_size) { return _cowdata.template resize<true>(p_size); }
 	_FORCE_INLINE_ const T &operator[](Size p_index) const { return _cowdata.get(p_index); }
+	_FORCE_INLINE_ const T last() const { return _cowdata.get(_cowdata.size() - 1); }
 	Error insert(Size p_pos, T p_val) { return _cowdata.insert(p_pos, p_val); }
 	Size find(const T &p_val, Size p_from = 0) const { return _cowdata.find(p_val, p_from); }
 	Size rfind(const T &p_val, Size p_from = -1) const { return _cowdata.rfind(p_val, p_from); }

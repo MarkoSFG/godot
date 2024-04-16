@@ -152,6 +152,8 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 
 	ConfirmationDialog *delete_window = nullptr;
 	Tree *delete_tree = nullptr;
+	ConfirmationDialog *any_state_transitions_window = nullptr;
+	Tree *any_state_transitions_tree = nullptr;
 
 	bool box_selecting = false;
 	Point2 box_selecting_from;
@@ -230,6 +232,10 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	TransitionLine selected_multi_transition;
 	void _add_transition(const bool p_nested_action = false);
 
+	int reorder_to_index = -1;
+	int reorder_to_index_source = -1;
+	float reorder_mouse_y_delta = 0.0f;
+
 	enum HoveredNodeArea {
 		HOVER_NODE_NONE = -1,
 		HOVER_NODE_PLAY = 0,
@@ -259,6 +265,12 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	void _delete_checked();
 	void _delete_all();
 	void _delete_tree_draw();
+	void _show_any_state_transitions_window();
+
+	void AnimationNodeStateMachineEditor::_any_state_button_pressed(Object *p_item, int p_column, int p_id, MouseButton p_button);
+	Variant get_drag_data_fw(const Point2 &p_point, Control *p_from);
+	bool can_drop_data_fw(const Point2 &p_point, const Variant &p_data, Control *p_from) const;
+	void drop_data_fw(const Point2 &p_point, const Variant &p_data, Control *p_from);
 
 	bool last_active = false;
 	StringName last_fading_from_node;

@@ -131,6 +131,9 @@ public:
 	void set_parameter(const StringName &p_name, const Variant &p_value);
 	Variant get_parameter(const StringName &p_name) const;
 
+	virtual void blend_start();
+	virtual void blend_end(const int p_index);
+
 	struct ChildNode {
 		StringName name;
 		Ref<AnimationNode> node;
@@ -185,6 +188,9 @@ class AnimationNodeStartState : public AnimationRootNode {
 
 class AnimationNodeAnyState : public AnimationRootNode {
 	GDCLASS(AnimationNodeAnyState, AnimationRootNode);
+
+public:
+	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 };
 
 class AnimationNodeEndState : public AnimationRootNode {
@@ -219,7 +225,7 @@ private:
 	HashMap<ObjectID, StringName> property_reference_map;
 	HashMap<StringName, Pair<Variant, bool>> property_map; // Property value and read-only flag.
 	HashMap<StringName, Variant> shared_property_map; // shared parameters
-	Vector<StringName> active_triggers;
+	HashMap<StringName, bool> active_triggers;
 
 	bool properties_dirty = true;
 	bool triggers_active = false;
@@ -283,6 +289,7 @@ public:
 	void set_shared_parameters(const Dictionary &p_data);
 	Dictionary get_shared_parameters() const;
 
+	bool has_trigger(const StringName &p_name);
 	void set_trigger(const StringName &p_name);
 	void reset_trigger(const StringName &p_name);
 
