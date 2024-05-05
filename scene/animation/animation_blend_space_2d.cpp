@@ -608,6 +608,20 @@ double AnimationNodeBlendSpace2D::_process(const AnimationMixer::PlaybackInfo p_
 	return mind;
 }
 
+void AnimationNodeBlendSpace2D::blend_start() {
+	for (int i = 0; i < blend_points_used; ++i) {
+		ERR_CONTINUE(blend_points[i].node.is_null());
+		blend_points[i].node->blend_start();
+	}
+}
+
+void AnimationNodeBlendSpace2D::blend_end(const int p_index) {
+	for (int i = 0; i < blend_points_used; ++i) {
+		ERR_CONTINUE(blend_points[i].node.is_null());
+		blend_points[i].node->blend_end(p_index);
+	}
+}
+
 String AnimationNodeBlendSpace2D::get_caption() const {
 	return "BlendSpace2D";
 }

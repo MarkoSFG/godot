@@ -473,6 +473,7 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	// The step must be set manually, as changing this setting should not change the step here.
 	EDITOR_SETTING_USAGE(Variant::FLOAT, PROPERTY_HINT_RANGE, "interface/inspector/default_float_step", 0.001, "0.0000001,1,0.0000001", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_RESTART_IF_CHANGED);
 	EDITOR_SETTING_USAGE(Variant::BOOL, PROPERTY_HINT_NONE, "interface/inspector/disable_folding", false, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_RESTART_IF_CHANGED);
+	EDITOR_SETTING_USAGE(Variant::BOOL, PROPERTY_HINT_NONE, "interface/inspector/use_type_folding", true, "", PROPERTY_USAGE_DEFAULT);
 	EDITOR_SETTING_USAGE(Variant::BOOL, PROPERTY_HINT_NONE, "interface/inspector/auto_unfold_foreign_scenes", true, "", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_RESTART_IF_CHANGED)
 	EDITOR_SETTING(Variant::BOOL, PROPERTY_HINT_NONE, "interface/inspector/horizontal_vector2_editing", false, "")
 	EDITOR_SETTING(Variant::BOOL, PROPERTY_HINT_NONE, "interface/inspector/horizontal_vector_types_editing", true, "")
@@ -1787,6 +1788,20 @@ void EditorSettings::notify_changes() {
 	root->propagate_notification(NOTIFICATION_EDITOR_SETTINGS_CHANGED);
 }
 
+bool EditorSettings::is_section_folded(const String& p_name) {
+	return inspector_section_unfolded.has(p_name);
+}
+
+void EditorSettings::set_section_unfolded(const String &p_name, bool p_unfolded) {
+	if (p_unfolded) {
+		if (!inspector_section_unfolded.has(p_name)) {
+			inspector_section_unfolded.insert(p_name);
+		}
+	} else {
+		inspector_section_unfolded.erase(p_name);
+	}
+}
+
 #ifdef TOOLS_ENABLED
 void EditorSettings::get_argument_options(const StringName &p_function, int p_idx, List<String> *r_options) const {
 	const String pf = p_function;
@@ -1845,6 +1860,7 @@ void EditorSettings::_bind_methods() {
 
 EditorSettings::EditorSettings() {
 	last_order = 0;
+	inspector_section_unfolded.clear();
 
 	_load_defaults();
 }

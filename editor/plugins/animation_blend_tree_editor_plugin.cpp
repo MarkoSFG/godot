@@ -100,7 +100,7 @@ Size2 AnimationNodeBlendTreeEditor::get_minimum_size() const {
 	return Size2(10, 200);
 }
 
-void AnimationNodeBlendTreeEditor::_property_changed(const StringName &p_property, const Variant &p_value, const String &p_field, bool p_changing) {
+void AnimationNodeBlendTreeEditor::_property_changed(const StringName &p_property, const Variant &p_value, const String &p_field, bool p_changing, Ref<AnimationNode> p_node) {
 	AnimationTree *tree = AnimationTreeEditor::get_singleton()->get_animation_tree();
 	if (!tree) {
 		return;
@@ -114,6 +114,11 @@ void AnimationNodeBlendTreeEditor::_property_changed(const StringName &p_propert
 	undo_redo->add_undo_method(this, "update_graph");
 	undo_redo->commit_action();
 	updating = false;
+
+	// update_graph is never meaningfully called above (updating is set to true and that just exits out) so we have to call it here (at least for param_mode which can change node UI)
+	if (String(p_property).ends_with("param_mode")) {
+		update_graph();
+	}
 }
 
 void AnimationNodeBlendTreeEditor::update_graph() {
@@ -191,8 +196,13 @@ void AnimationNodeBlendTreeEditor::update_graph() {
 
 		List<PropertyInfo> pinfo;
 		agnode->get_parameter_list(&pinfo);
+		bool using_shared_params = (int)tree->get(AnimationTreeEditor::get_singleton()->get_base_path() + String(E) + "/param_mode") == AnimationNode::PARAMETER;
 		for (const PropertyInfo &F : pinfo) {
 			if (!(F.usage & PROPERTY_USAGE_EDITOR)) {
+				continue;
+			}
+			if (using_shared_params && F.name == "blend_amount" ||
+				!using_shared_params && F.name == "parameter") {
 				continue;
 			}
 			String base_path = AnimationTreeEditor::get_singleton()->get_base_path() + String(E) + "/" + F.name;
@@ -202,7 +212,7 @@ void AnimationNodeBlendTreeEditor::update_graph() {
 				prop->set_object_and_property(tree, base_path);
 				prop->update_property();
 				prop->set_name_split_ratio(0);
-				prop->connect("property_changed", callable_mp(this, &AnimationNodeBlendTreeEditor::_property_changed));
+				prop->connect("property_changed", callable_mp(this, &AnimationNodeBlendTreeEditor::_property_changed).bind(agnode), CONNECT_DEFERRED);
 				node->add_child(prop);
 				visible_properties.push_back(prop);
 			}

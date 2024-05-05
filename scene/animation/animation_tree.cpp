@@ -34,6 +34,7 @@
 #include "animation_blend_tree.h"
 #include "core/config/engine.h"
 #include "scene/animation/animation_player.h"
+#include "animation_node_state_machine.h"
 #include "scene/scene_string_names.h"
 
 void AnimationNode::get_parameter_list(List<PropertyInfo> *r_list) const {
@@ -74,7 +75,7 @@ void AnimationNode::set_parameter(const StringName &p_name, const Variant &p_val
 	if (process_state->is_testing) {
 		return;
 	}
-	ERR_FAIL_COND(!process_state->tree->property_parent_map.has(node_state.base_path));
+	ERR_FAIL_COND_MSG(!process_state->tree->property_parent_map.has(node_state.base_path), node_state.base_path);
 	ERR_FAIL_COND(!process_state->tree->property_parent_map[node_state.base_path].has(p_name));
 	StringName path = process_state->tree->property_parent_map[node_state.base_path][p_name];
 
@@ -83,7 +84,7 @@ void AnimationNode::set_parameter(const StringName &p_name, const Variant &p_val
 
 Variant AnimationNode::get_parameter(const StringName &p_name) const {
 	ERR_FAIL_NULL_V(process_state, Variant());
-	ERR_FAIL_COND_V(!process_state->tree->property_parent_map.has(node_state.base_path), Variant());
+	ERR_FAIL_COND_V_MSG(!process_state->tree->property_parent_map.has(node_state.base_path), Variant(), node_state.base_path);
 	ERR_FAIL_COND_V(!process_state->tree->property_parent_map[node_state.base_path].has(p_name), Variant());
 
 	StringName path = process_state->tree->property_parent_map[node_state.base_path][p_name];
@@ -105,50 +106,9 @@ void AnimationNode::get_child_nodes(List<ChildNode> *r_child_nodes) {
 }
 
 void AnimationNode::blend_start() {
-	AnimationNodeBlendTree *blend_tree = Object::cast_to<AnimationNodeBlendTree>(node_state.parent);
-	ERR_FAIL_NULL(blend_tree);
-
-	for (int i = 0; i < inputs.size(); ++i) {
-		// Update connections.
-		StringName current_name = blend_tree->get_node_name(Ref<AnimationNode>(this));
-		node_state.connections = blend_tree->get_node_connection_array(current_name);
-
-		for (int m = 0; m < node_state.connections.size(); ++m) {
-			// Get node which is connected input port.
-			StringName node_name = node_state.connections[m];
-			ERR_CONTINUE_MSG(!blend_tree->has_node(node_name), vformat(RTR("Nothing connected to input '%s' of node '%s'."), get_input_name(m), current_name));
-
-			Ref<AnimationNode> node = blend_tree->get_node(node_name);
-			ERR_CONTINUE(node.is_null());
-
-			node->blend_start();
-		}
-	}
 }
 
 void AnimationNode::blend_end(const int p_index) {
-	AnimationNodeBlendTree *blend_tree = Object::cast_to<AnimationNodeBlendTree>(node_state.parent);
-	ERR_FAIL_NULL(blend_tree);
-
-	for (int i = 0; i < inputs.size(); ++i) {
-		// Update connections.
-		StringName current_name = blend_tree->get_node_name(Ref<AnimationNode>(this));
-		node_state.connections = blend_tree->get_node_connection_array(current_name);
-
-		for (int m = 0; m < node_state.connections.size(); ++m) {
-			// Get node which is connected input port.
-			StringName node_name = node_state.connections[m];
-			ERR_CONTINUE_MSG(!blend_tree->has_node(node_name), vformat(RTR("Nothing connected to input '%s' of node '%s'."), get_input_name(m), current_name));
-			if (!blend_tree->has_node(node_name)) {
-				continue;
-			}
-
-			Ref<AnimationNode> node = blend_tree->get_node(node_name);
-			ERR_CONTINUE(node.is_null());
-
-			node->blend_end(p_index);
-		}
-	}
 }
 
 void AnimationNode::blend_animation(const StringName &p_animation, AnimationMixer::PlaybackInfo p_playback_info) {
@@ -738,11 +698,28 @@ void AnimationTree::rename_shared_parameter(const String& p_old_text, const Stri
 	shared_property_map.remove(shared_property_map.find(p_old_text));
 	shared_property_map[p_text] = param_value;
 
-	// Edit: nope, don't bother - way too convoluted / complicated to achieve this in the current data architecture
-	// traverse tree and call every node's shared_parameter_renamed method (as it should then update blend_amount_parameter on relevant nodes)
-	/*if (root_animation_node.is_valid()) {
-		root_animation_node->shared_parameter_renamed(this, p_old_text, p_text);
-	}*/
+	if (root_animation_node.is_valid()) {
+		rename_shared_parameter_node(p_old_text, p_text, SceneStringNames::get_singleton()->parameters_base_path, root_animation_node);
+	}
+}
+
+void AnimationTree::rename_shared_parameter_node(const String &p_old_text, const String &p_text, const String &p_base_path, Ref<AnimationNode> p_node) {
+	List<PropertyInfo> plist;
+	p_node->get_parameter_list(&plist);
+	for (PropertyInfo &pinfo : plist) {
+		if (pinfo.name == "parameter") {
+			if (get(p_base_path + pinfo.name) == p_old_text) {
+				set(p_base_path + pinfo.name, p_text);
+			}
+		}
+	}
+
+	List<AnimationNode::ChildNode> children;
+	p_node->get_child_nodes(&children);
+
+	for (const AnimationNode::ChildNode &E : children) {
+		rename_shared_parameter_node(p_old_text, p_text, p_base_path + E.name + "/", E.node);
+	}
 }
 
 bool AnimationTree::any_triggers_active() const {
@@ -867,6 +844,22 @@ void AnimationTree::_update_properties() {
 
 void AnimationTree::_notification(int p_what) {
 	switch (p_what) {
+		case NOTIFICATION_POST_ENTER_TREE: {
+			List<AnimationNode::ChildNode> nodes;
+			nodes.clear();
+			root_animation_node->get_child_nodes(&nodes);
+
+			for (int i = 0; i < nodes.size(); i++) {
+				if (nodes[i].node->is_state_machine()) {
+					Ref<AnimationNodeStateMachine> anodesm = nodes[i].node;
+					if (anodesm.is_valid()) {
+						anodesm->post_enter_tree();
+					}
+				}
+				nodes[i].node->get_child_nodes(&nodes);
+			}
+			break;
+		}
 		case NOTIFICATION_ENTER_TREE: {
 			_setup_animation_player();
 			if (active) {

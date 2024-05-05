@@ -1500,7 +1500,14 @@ void EditorInspectorSection::setup(const String &p_section, const String &p_labe
 
 	if (foldable) {
 		_test_unfold();
-		if (object->editor_is_section_unfolded(section)) {
+
+		bool unfolded = object->editor_is_section_unfolded(section);
+		if (bool(EDITOR_GET("interface/inspector/use_type_folding"))) {
+			unfolded = EditorSettings::get_singleton()->is_section_folded(String(object->get_class_name()) + "." + section);
+			object->editor_set_section_unfold(section, unfolded);
+		}
+		
+		if (unfolded) {
 			vbox->show();
 		} else {
 			vbox->hide();
@@ -1549,6 +1556,7 @@ void EditorInspectorSection::unfold() {
 
 	_test_unfold();
 
+	EditorSettings::get_singleton()->set_section_unfolded(String(object->get_class_name()) + "." + section, true);
 	object->editor_set_section_unfold(section, true);
 	vbox->show();
 	queue_redraw();
@@ -1563,6 +1571,7 @@ void EditorInspectorSection::fold() {
 		return;
 	}
 
+	EditorSettings::get_singleton()->set_section_unfolded(String(object->get_class_name()) + "." + section, false);
 	object->editor_set_section_unfold(section, false);
 	vbox->hide();
 	queue_redraw();

@@ -138,6 +138,8 @@ public:
 	String get_y_label() const;
 
 	virtual double _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
+	virtual void blend_start() override;
+	virtual void blend_end(const int p_index) override;
 	virtual String get_caption() const override;
 
 	Vector2 get_closest_point(const Vector2 &p_point);

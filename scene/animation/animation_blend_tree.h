@@ -217,15 +217,12 @@ class AnimationNodeBlend2 : public AnimationNodeSync {
 	GDCLASS(AnimationNodeBlend2, AnimationNodeSync);
 
 	StringName blend_amount = PNAME("blend_amount");
-	ParamMode param_mode = VALUE;
+	StringName param_mode = "param_mode";
 
 protected:
 	static void _bind_methods();
 
 public:
-	void set_param_mode(ParamMode p_param_mode);
-	ParamMode get_param_mode() const;
-
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
 
@@ -241,15 +238,12 @@ class AnimationNodeBlend3 : public AnimationNodeSync {
 	GDCLASS(AnimationNodeBlend3, AnimationNodeSync);
 
 	StringName blend_amount = PNAME("blend_amount");
-	ParamMode param_mode = VALUE;
+	StringName param_mode = "param_mode";
 
 protected:
 	static void _bind_methods();
 
 public:
-	void set_param_mode(ParamMode p_param_mode);
-	ParamMode get_param_mode() const;
-
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
 

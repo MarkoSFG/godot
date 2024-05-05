@@ -110,6 +110,12 @@ public:
 		STATE_MACHINE_TYPE_ROOT,
 		STATE_MACHINE_TYPE_NESTED,
 		STATE_MACHINE_TYPE_GROUPED,
+		STATE_MACHINE_TYPE_SUBSTATE,
+	};
+
+	struct State {
+		Ref<AnimationRootNode> node;
+		Vector2 position;
 	};
 
 private:
@@ -117,24 +123,24 @@ private:
 
 	StateMachineType state_machine_type = STATE_MACHINE_TYPE_ROOT;
 
-	struct State {
-		Ref<AnimationRootNode> node;
-		Vector2 position;
-	};
-
+	AnimationNodeStateMachine* parent;
 	HashMap<StringName, State> states;
+	HashMap<StringName, AnimationNodeStateMachine *> sub_states;
 	bool allow_transition_to_self = false;
 	bool reset_ends = false;
 
 	struct Transition {
 		StringName from;
 		StringName to;
+		StringName to_sub_state;
+		StringName to_sub_state_node;
 		Ref<AnimationNodeStateMachineTransition> transition;
 	};
 
 	Vector<Transition> transitions;
 	HashMap<StringName, Vector<Transition>> transitions_by_node;
 
+	StringName sub_state_start_node;
 	StringName playback = "playback";
 	bool updating_transitions = false;
 
@@ -165,6 +171,8 @@ public:
 	StringName end_node = "End";
 	StringName any_state_node = "Any State";
 
+	virtual bool is_state_machine() override { return true; }
+
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
 	virtual bool is_parameter_read_only(const StringName &p_parameter) const override;
@@ -182,6 +190,8 @@ public:
 	Vector2 get_node_position(const StringName &p_name) const;
 
 	virtual void get_child_nodes(List<ChildNode> *r_child_nodes) override;
+	AnimationNodeStateMachine *get_sub_state_parent();
+	String get_sub_state_parent_path();
 
 	int get_multi_transition_count(const StringName &p_from, const StringName &p_to) const;
 	bool has_transition(const StringName &p_from, const StringName &p_to) const;
@@ -197,6 +207,7 @@ public:
 	StringName get_transition_to(int p_transition) const;
 	int get_transition_count() const;
 	bool is_transition_across_group(int p_transition) const;
+	bool is_transition_across_group(const StringName &p_from, const StringName &p_to) const;
 	void remove_transition_by_index(const int p_transition);
 	void remove_transition_by_index_node(const int p_transition, bool remove_by_node);
 	void remove_multi_transition(const StringName &p_from, const StringName &p_to, int index);
@@ -205,6 +216,7 @@ public:
 
 	void set_state_machine_type(StateMachineType p_state_machine_type);
 	StateMachineType get_state_machine_type() const;
+	void post_enter_tree();
 
 	void set_allow_transition_to_self(bool p_enable);
 	bool is_allow_transition_to_self() const;
@@ -212,6 +224,7 @@ public:
 	void set_reset_ends(bool p_enable);
 	bool are_ends_reset() const;
 
+	bool can_playback_node(const StringName &p_name) const;
 	bool can_edit_node(const StringName &p_name) const;
 
 	void set_graph_offset(const Vector2 &p_offset);
@@ -251,10 +264,12 @@ class AnimationNodeStateMachinePlayback : public Resource {
 
 	struct NextInfo {
 		StringName node;
+		StringName node_full_path;
 		double xfade;
 		Ref<Curve> curve;
 		AnimationNodeStateMachineTransition::SwitchMode switch_mode;
 		bool is_reset;
+		AnimationNodeStateMachine *sub_state_machine;
 	};
 
 	struct ChildStateMachineInfo {
@@ -265,10 +280,11 @@ class AnimationNodeStateMachinePlayback : public Resource {
 
 	struct FadingBlend {
 		StringName fading_from;
+		StringName fading_from_full_path;
 		float fading_time = 0.0;
 		float fading_pos = 0.0;
 		float fade_total = 0.0;
-		//int fading_time_id = 0;
+		AnimationNodeStateMachine *sub_state_machine;
 	};
 
 	Ref<AnimationNodeStateMachineTransition> default_transition;
@@ -281,6 +297,8 @@ class AnimationNodeStateMachinePlayback : public Resource {
 	double pos_current = 0.0;
 
 	StringName current;
+	StringName current_full_path;
+	AnimationNodeStateMachine *current_sub_state;
 	Ref<Curve> current_curve;
 	Vector<AnimationNodeStateMachine::Transition> current_transitions;
 	Vector<AnimationNodeStateMachine::Transition> no_transitions;
@@ -290,14 +308,6 @@ class AnimationNodeStateMachinePlayback : public Resource {
 
 	Vector<FadingBlend> fading_blends;
 	HashMap<StringName, int> fading_blend_count;
-	//StringName fading_from;
-	//float fading_time = 0.0;
-	//float fading_pos = 0.0;
-	//int blend_id = 0;
-	//int next_id() {
-	//	blend_id = blend_id + 1 % 100000;
-	//	return blend_id;
-	//}
 
 	Vector<StringName> path;
 	bool playing = false;
@@ -337,7 +347,10 @@ class AnimationNodeStateMachinePlayback : public Resource {
 	Ref<AnimationNodeStateMachineTransition> _check_group_transition(AnimationTree *p_tree, AnimationNodeStateMachine *p_state_machine, const AnimationNodeStateMachine::Transition &p_transition, Ref<AnimationNodeStateMachine> &r_state_machine, bool &r_bypass) const;
 	bool _can_transition_to_next(AnimationTree *p_tree, AnimationNodeStateMachine *p_state_machine, NextInfo p_next, bool p_test_only);
 
-	void _set_current(AnimationNodeStateMachine *p_state_machine, const StringName &p_state);
+	void _set_current(AnimationNodeStateMachine *p_state_machine, const StringName &p_state, const StringName &p_state_full_path, AnimationNodeStateMachine *p_sub_state);
+	bool has_state(AnimationNodeStateMachine *p_state_machine, const StringName &p_blend, AnimationNodeStateMachine *p_sub_state_machine);
+	AnimationNodeStateMachine::State get_current_state(AnimationNodeStateMachine *p_state_machine);
+	AnimationNodeStateMachine::State get_fading_state(AnimationNodeStateMachine *p_state_machine, const FadingBlend &p_blend);
 	void _set_grouped(bool p_is_grouped);
 	void _set_base_path(const String &p_base_path);
 	Ref<AnimationNodeStateMachinePlayback> _get_parent_playback(AnimationTree *p_tree) const;
@@ -359,6 +372,7 @@ public:
 	bool is_end() const;
 	StringName get_current_node() const;
 	StringName get_fading_from_node() const;
+	AnimationNodeStateMachine* get_fading_from_sub_state() const;
 	Vector<StringName> get_travel_path() const;
 	float get_current_play_pos() const;
 	float get_current_length() const;

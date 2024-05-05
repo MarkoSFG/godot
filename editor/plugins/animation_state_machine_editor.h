@@ -46,6 +46,7 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	GDCLASS(AnimationNodeStateMachineEditor, AnimationTreeNodeEditorPlugin);
 
 	Ref<AnimationNodeStateMachine> state_machine;
+	String transition_base_path;
 
 	bool read_only = false;
 
@@ -143,7 +144,6 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	PopupMenu *menu = nullptr;
 	PopupMenu *connect_menu = nullptr;
 	PopupMenu *state_machine_menu = nullptr;
-	PopupMenu *end_menu = nullptr;
 	PopupMenu *animations_menu = nullptr;
 	Vector<String> animations_to_add;
 	Vector<String> nodes_to_connect;
@@ -152,8 +152,9 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 
 	ConfirmationDialog *delete_window = nullptr;
 	Tree *delete_tree = nullptr;
-	ConfirmationDialog *any_state_transitions_window = nullptr;
-	Tree *any_state_transitions_tree = nullptr;
+	ConfirmationDialog *state_transitions_window = nullptr;
+	Tree *state_transitions_tree = nullptr;
+	StringName transitions_window_node;
 
 	bool box_selecting = false;
 	Point2 box_selecting_from;
@@ -230,7 +231,7 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	StringName selected_transition_to;
 	int selected_transition_index = -1;
 	TransitionLine selected_multi_transition;
-	void _add_transition(const bool p_nested_action = false);
+	void _add_transition(const bool p_nested_action = false, const bool p_full_to_path = false);
 
 	int reorder_to_index = -1;
 	int reorder_to_index_source = -1;
@@ -258,6 +259,7 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 
 	void _erase_selected(const bool p_nested_action = false);
 	void _update_mode();
+	void _open_sub_state_menu(const Vector2 &p_position);
 	void _open_menu(const Vector2 &p_position);
 	bool _create_submenu(PopupMenu *p_menu, Ref<AnimationNodeStateMachine> p_nodesm, const StringName &p_name, const StringName &p_path);
 	void _stop_connecting();
@@ -265,7 +267,7 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	void _delete_checked();
 	void _delete_all();
 	void _delete_tree_draw();
-	void _show_any_state_transitions_window();
+	void _show_state_transitions_window(const StringName &p_node);
 
 	void AnimationNodeStateMachineEditor::_any_state_button_pressed(Object *p_item, int p_column, int p_id, MouseButton p_button);
 	Variant get_drag_data_fw(const Point2 &p_point, Control *p_from);

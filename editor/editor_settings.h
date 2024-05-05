@@ -96,6 +96,8 @@ private:
 	Vector<String> favorites;
 	Vector<String> recent_dirs;
 
+	HashSet<String> inspector_section_unfolded;
+
 	bool save_changed_setting = true;
 	bool optimize_save = true; //do not save stuff that came from config but was not set from engine
 
@@ -185,6 +187,8 @@ public:
 	const Array get_builtin_action_overrides(const String &p_name) const;
 
 	void notify_changes();
+	bool is_section_folded(const String &p_name);
+	void set_section_unfolded(const String &p_name, bool p_unfolded);
 
 #ifdef TOOLS_ENABLED
 	virtual void get_argument_options(const StringName &p_function, int p_idx, List<String> *r_options) const override;

@@ -41,6 +41,7 @@ class AnimationNodeStartState;
 class AnimationNodeAnyState;
 class AnimationNodeEndState;
 class AnimationTree;
+class AnimationNodeStateMachine;
 
 class AnimationNode : public Resource {
 	GDCLASS(AnimationNode, Resource);
@@ -48,7 +49,7 @@ class AnimationNode : public Resource {
 public:
 	friend class AnimationTree;
 
-	enum ParamMode {
+	enum ParamMode : int {
 		VALUE,
 		PARAMETER,
 	};
@@ -68,6 +69,8 @@ public:
 	Vector<Input> inputs;
 	HashMap<NodePath, bool> filter;
 	bool filter_enabled = false;
+	Ref<AnimationNode> parent;
+	String node_name;
 
 	// Temporary state for blending process which needs to be stored in each AnimationNodes.
 	struct NodeState {
@@ -123,6 +126,8 @@ protected:
 	GDVIRTUAL0RC(bool, _has_filter)
 
 public:
+	virtual bool is_state_machine() { return false; }
+
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const;
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const;
 	virtual bool is_parameter_read_only(const StringName &p_parameter) const;
@@ -262,6 +267,7 @@ private:
 	// Make animation instances.
 	virtual bool _blend_pre_process(double p_delta, int p_track_count, const HashMap<NodePath, int> &p_track_map) override;
 	virtual void _blend_post_process() override;
+	void rename_shared_parameter_node(const String &p_old_text, const String &p_text, const String &p_base_path, Ref<AnimationNode> p_node);
 
 #ifndef DISABLE_DEPRECATED
 	void _set_process_callback_bind_compat_80813(AnimationProcessCallback p_mode);

@@ -649,21 +649,14 @@ AnimationNodeAdd3::AnimationNodeAdd3() {
 
 /////////////////////////////////////////////
 
-void AnimationNodeBlend2::set_param_mode(ParamMode p_param_mode) {
-	param_mode = p_param_mode;
-}
-
-AnimationNode::ParamMode AnimationNodeBlend2::get_param_mode() const {
-	return param_mode;
-}
-
 void AnimationNodeBlend2::get_parameter_list(List<PropertyInfo> *r_list) const {
+	r_list->push_back(PropertyInfo(Variant::INT, param_mode, PROPERTY_HINT_ENUM, "Value,Parameter"));
 	r_list->push_back(PropertyInfo(Variant::FLOAT, blend_amount, PROPERTY_HINT_RANGE, "0,1,0.01,or_less,or_greater"));
 	r_list->push_back(PropertyInfo(Variant::STRING, "parameter", PROPERTY_HINT_NONE));
 }
 
 Variant AnimationNodeBlend2::get_parameter_default_value(const StringName &p_parameter) const {
-	if (p_parameter == "blend_amount") {
+	if (p_parameter == "blend_amount" || p_parameter == "param_mode") {
 		return 0;
 	} else {
 		return "";
@@ -683,7 +676,7 @@ String AnimationNodeBlend2::get_caption() const {
 
 double AnimationNodeBlend2::_process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only) {
 	double amount;
-	if (param_mode == VALUE) {
+	if ((int)get_parameter(param_mode) == AnimationNode::VALUE) {
 		amount = get_parameter(blend_amount);
 	} else {
 		String param = get_parameter("parameter");
@@ -712,10 +705,6 @@ bool AnimationNodeBlend2::has_filter() const {
 }
 
 void AnimationNodeBlend2::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("set_param_mode", "param_mode"), &AnimationNodeBlend2::set_param_mode);
-	ClassDB::bind_method(D_METHOD("get_param_mode"), &AnimationNodeBlend2::get_param_mode);
-
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "param_mode", PROPERTY_HINT_ENUM, "Value,Parameter"), "set_param_mode", "get_param_mode");
 }
 
 AnimationNodeBlend2::AnimationNodeBlend2() {
@@ -725,21 +714,14 @@ AnimationNodeBlend2::AnimationNodeBlend2() {
 
 //////////////////////////////////////
 
-void AnimationNodeBlend3::set_param_mode(ParamMode p_param_mode) {
-	param_mode = p_param_mode;
-}
-
-AnimationNode::ParamMode AnimationNodeBlend3::get_param_mode() const {
-	return param_mode;
-}
-
 void AnimationNodeBlend3::get_parameter_list(List<PropertyInfo> *r_list) const {
+	r_list->push_back(PropertyInfo(Variant::INT, param_mode, PROPERTY_HINT_ENUM, "Value,Parameter"));
 	r_list->push_back(PropertyInfo(Variant::FLOAT, blend_amount, PROPERTY_HINT_RANGE, "-1,1,0.01,or_less,or_greater"));
 	r_list->push_back(PropertyInfo(Variant::STRING, "parameter", PROPERTY_HINT_NONE));
 }
 
 Variant AnimationNodeBlend3::get_parameter_default_value(const StringName &p_parameter) const {
-	if (p_parameter == "blend_amount") {
+	if (p_parameter == "blend_amount" || p_parameter == param_mode) {
 		return 0;
 	} else {
 		return "";
@@ -759,7 +741,7 @@ String AnimationNodeBlend3::get_caption() const {
 
 double AnimationNodeBlend3::_process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only) {
 	double amount;
-	if (param_mode == VALUE) {
+	if ((int)get_parameter(param_mode) == AnimationNode::VALUE) {
 		amount = get_parameter(blend_amount);
 	} else {
 		String param = get_parameter("parameter");
@@ -790,10 +772,6 @@ double AnimationNodeBlend3::_process(const AnimationMixer::PlaybackInfo p_playba
 }
 
 void AnimationNodeBlend3::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("set_param_mode", "param_mode"), &AnimationNodeBlend3::set_param_mode);
-	ClassDB::bind_method(D_METHOD("get_param_mode"), &AnimationNodeBlend3::get_param_mode);
-
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "param_mode", PROPERTY_HINT_ENUM, "Value,Parameter"), "set_param_mode", "get_param_mode");
 }
 
 AnimationNodeBlend3::AnimationNodeBlend3() {
@@ -1513,17 +1491,15 @@ double AnimationNodeBlendTree::_process(const AnimationMixer::PlaybackInfo p_pla
 }
 
 void AnimationNodeBlendTree::blend_start() {
-	Ref<AnimationNode> node = get_node("output");
-	ERR_FAIL_COND(node.is_null());
-	node->node_state.parent = this;
-	node->blend_start();
+	for (const KeyValue<StringName, Node> &E : nodes) {
+		E.value.node->blend_start();
+	}
 }
 
 void AnimationNodeBlendTree::blend_end(const int p_index) {
-	Ref<AnimationNode> node = get_node("output");
-	ERR_FAIL_COND(node.is_null());
-	node->node_state.parent = this;
-	node->blend_end(p_index);
+	for (const KeyValue<StringName, Node> &E : nodes) {
+		E.value.node->blend_end(p_index);
+	}
 }
 
 void AnimationNodeBlendTree::get_node_list(List<StringName> *r_list) {
