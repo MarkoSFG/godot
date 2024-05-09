@@ -185,6 +185,7 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 		Rect2 play;
 		Rect2 name;
 		Rect2 edit;
+		Rect2 content_rect;
 		bool can_edit;
 	};
 
@@ -193,6 +194,8 @@ class AnimationNodeStateMachineEditor : public AnimationTreeNodeEditorPlugin {
 	struct TransitionLine {
 		StringName from_node;
 		StringName to_node;
+		StringName from_node_full;
+		StringName to_node_full;
 		Vector2 from;
 		Vector2 to;
 		AnimationNodeStateMachineTransition::SwitchMode mode;

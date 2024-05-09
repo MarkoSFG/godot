@@ -87,7 +87,7 @@ double AnimationNodeAnimation::_process(const AnimationMixer::PlaybackInfo p_pla
 	Animation::LoopedFlag looped_flag = Animation::LOOPED_FLAG_NONE;
 	bool node_backward = play_mode == PLAY_MODE_BACKWARD;
 
-	double p_time = p_playback_info.time;
+	double p_time = p_playback_info.time * speed;
 	bool p_seek = p_playback_info.seeked;
 	bool p_is_external_seeking = p_playback_info.is_external_seeking;
 
@@ -203,6 +203,14 @@ AnimationNodeAnimation::PlayMode AnimationNodeAnimation::get_play_mode() const {
 	return play_mode;
 }
 
+void AnimationNodeAnimation::set_speed(double p_speed) {
+	speed = p_speed;
+}
+
+double AnimationNodeAnimation::get_speed() const {
+	return speed;
+}
+
 void AnimationNodeAnimation::set_backward(bool p_backward) {
 	backward = p_backward;
 }
@@ -218,8 +226,12 @@ void AnimationNodeAnimation::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_play_mode", "mode"), &AnimationNodeAnimation::set_play_mode);
 	ClassDB::bind_method(D_METHOD("get_play_mode"), &AnimationNodeAnimation::get_play_mode);
 
+	ClassDB::bind_method(D_METHOD("set_speed", "speed"), &AnimationNodeAnimation::set_speed);
+	ClassDB::bind_method(D_METHOD("get_speed"), &AnimationNodeAnimation::get_speed);
+
 	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "animation"), "set_animation", "get_animation");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "play_mode", PROPERTY_HINT_ENUM, "Forward,Backward"), "set_play_mode", "get_play_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed"), "set_speed", "get_speed");
 
 	BIND_ENUM_CONSTANT(PLAY_MODE_FORWARD);
 	BIND_ENUM_CONSTANT(PLAY_MODE_BACKWARD);
@@ -228,6 +240,7 @@ void AnimationNodeAnimation::_bind_methods() {
 AnimationNodeAnimation::AnimationNodeAnimation() {
 	cur_time_list.clear();
 	cur_time_list.push_back(0.0);
+	speed = 1.0;
 }
 
 ////////////////////////////////////////////////////////
@@ -1310,7 +1323,7 @@ StringName AnimationNodeBlendTree::get_node_name(const Ref<AnimationNode> &p_nod
 
 void AnimationNodeBlendTree::set_node_position(const StringName &p_node, const Vector2 &p_position) {
 	ERR_FAIL_COND(!nodes.has(p_node));
-	nodes[p_node].position = p_position;
+	nodes[p_node].position = *(new Vector2(round(p_position.x / 10.0) * 10, round(p_position.y / 10.0) * 10));
 }
 
 Vector2 AnimationNodeBlendTree::get_node_position(const StringName &p_node) const {

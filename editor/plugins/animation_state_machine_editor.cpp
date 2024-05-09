@@ -179,7 +179,7 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 
 		for (int i = node_rects.size() - 1; i >= 0; i--) { //inverse to draw order
 			if (node_rects[i].play.has_point(mb->get_position())) { //edit name
-				if (play_mode->get_selected() == 1 || !playback->is_playing()) {
+				if (play_mode->get_selected() == 0 || !playback->is_playing()) {
 					// Start
 					playback->start(node_directory + String(node_rects[i].node_name));
 				} else {
@@ -421,38 +421,12 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 	if (mm.is_valid() && dragging_selected_attempt && !read_only) {
 		dragging_selected = true;
 		drag_ofs = mm->get_position() - drag_from;
-		snap_x = StringName();
-		snap_y = StringName();
-		{
-			//snap
-			Vector2 cpos = state_machine->get_node_position(selected_node) + drag_ofs / EDSCALE;
-			List<StringName> nodes;
-			state_machine->get_node_list(&nodes);
 
-			float best_d_x = 1e20;
-			float best_d_y = 1e20;
-
-			for (const StringName &E : nodes) {
-				if (E == selected_node) {
-					continue;
-				}
-				Vector2 npos = state_machine->get_node_position(E);
-
-				float d_x = ABS(npos.x - cpos.x);
-				if (d_x < MIN(5, best_d_x)) {
-					drag_ofs.x -= cpos.x - npos.x;
-					best_d_x = d_x;
-					snap_x = E;
-				}
-
-				float d_y = ABS(npos.y - cpos.y);
-				if (d_y < MIN(5, best_d_y)) {
-					drag_ofs.y -= cpos.y - npos.y;
-					best_d_y = d_y;
-					snap_y = E;
-				}
-			}
-		}
+		// snap dragging to 10 pixel increments
+		Vector2 gridPos = state_machine->get_node_position(selected_node) + drag_ofs / EDSCALE;
+		gridPos.x = round(gridPos.x / 10.0) * 10;
+		gridPos.y = round(gridPos.y / 10.0) * 10;
+		drag_ofs = (gridPos - state_machine->get_node_position(selected_node)) * EDSCALE;
 
 		state_machine_draw->queue_redraw();
 	}
@@ -496,10 +470,9 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 		HoveredNodeArea new_hovered_node_area = HOVER_NODE_NONE;
 		if (tool_select->is_pressed()) {
 			for (int i = node_rects.size() - 1; i >= 0; i--) { // Inverse to draw order.
-
-				if (!state_machine->can_edit_node(node_rects[i].node_name)) {
+				/* if (!state_machine->can_edit_node(node_rects[i].node_name)) {
 					continue; // start/end node can't be edited
-				}
+				}*/
 
 				if (node_rects[i].node.has_point(mm->get_position())) {
 					new_hovered_node_name = node_rects[i].node_name;
@@ -541,8 +514,8 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 			}
 
 			if (closest >= 0) {
-				String from = String(transition_lines[closest].from_node);
-				String to = String(transition_lines[closest].to_node);
+				String from = String(transition_lines[closest].from_node_full);
+				String to = String(transition_lines[closest].to_node_full);
 				String tooltip = from + " -> " + to;
 
 				if (transition_lines[closest].multi_transitions.size() > 0) {
@@ -550,8 +523,8 @@ void AnimationNodeStateMachineEditor::_state_machine_gui_input(const Ref<InputEv
 				}
 
 				for (int i = 0; i < transition_lines[closest].multi_transitions.size(); i++) {
-					from = String(transition_lines[closest].multi_transitions[i].from_node);
-					to = String(transition_lines[closest].multi_transitions[i].to_node);
+					from = String(transition_lines[closest].multi_transitions[i].from_node_full);
+					to = String(transition_lines[closest].multi_transitions[i].to_node_full);
 					tooltip += "\n[" + itos(i + 1) + "] " + from + " -> " + to;
 				}
 				state_machine_draw->set_tooltip_text(tooltip);
@@ -861,7 +834,7 @@ void AnimationNodeStateMachineEditor::_show_state_transitions_window(const Strin
 	}
 
 	if (!state_transitions_window->is_visible()) {
-		state_transitions_window->popup_centered(Vector2(700, 300));
+		state_transitions_window->popup_centered(Vector2(700, 600));
 	}
 }
 
@@ -1062,14 +1035,14 @@ void AnimationNodeStateMachineEditor::_connection_draw(const Vector2 &p_from, co
 	}
 
 	if (p_selected) {
-		state_machine_draw->draw_line(p_from, p_to, highlight_color, 6, true);
+		state_machine_draw->draw_line(p_from, p_to, highlight_color, 4.0F, true);
 	}
-	state_machine_draw->draw_line(p_from, p_to, line_color, 2, true);
+	state_machine_draw->draw_line(p_from, p_to, line_color, 1.5F, true);
 
 	if (p_fade_ratio > 0.0) {
 		Color fade_line_color = highlight_color;
 		fade_line_color.set_hsv(1.0, fade_line_color.get_s(), fade_line_color.get_v());
-		state_machine_draw->draw_line(p_from, p_from.lerp(p_to, p_fade_ratio), fade_line_color, 2);
+		state_machine_draw->draw_line(p_from, p_from.lerp(p_to, p_fade_ratio), fade_line_color, 1.5F);
 	}
 
 	const int ICON_COUNT = sizeof(theme_cache.transition_icons) / sizeof(*theme_cache.transition_icons);
@@ -1085,9 +1058,9 @@ void AnimationNodeStateMachineEditor::_connection_draw(const Vector2 &p_from, co
 	state_machine_draw->draw_set_transform_matrix(xf);
 	if (!p_is_across_group) {
 		if (p_multi_transitions) {
-			state_machine_draw->draw_texture(theme_cache.transition_icons[0], Vector2(-icon->get_width(), 0), icon_color);
+			state_machine_draw->draw_texture(theme_cache.transition_icons[0], Vector2(-icon->get_width() * 0.7, 0), icon_color);
 			state_machine_draw->draw_texture(theme_cache.transition_icons[0], Vector2(), icon_color);
-			state_machine_draw->draw_texture(theme_cache.transition_icons[0], Vector2(icon->get_width(), 0), icon_color);
+			state_machine_draw->draw_texture(theme_cache.transition_icons[0], Vector2(icon->get_width() * 0.7, 0), icon_color);
 		} else {
 			state_machine_draw->draw_texture(icon, Vector2(), icon_color);
 		}
@@ -1175,15 +1148,20 @@ void AnimationNodeStateMachineEditor::_state_machine_draw() {
 		s.width += name_string_size;
 		s.height += MAX(theme_cache.node_title_font->get_height(theme_cache.node_title_font_size), theme_cache.play_node->get_height());
 		s.width += sep + theme_cache.play_node->get_width();
-
 		if (state_machine->start_node == name) {
 			needs_editor = true;
 		}
-
 		if (needs_editor) {
 			s.width += sep + theme_cache.edit_node->get_width();
 		}
+		Size2 content_size = s;
+		if (name != state_machine->any_state_node && name != state_machine->start_node && name != state_machine->end_node) {
+			s.width = 240;
+		} else {
+			s.width = 120;
+		}
 
+		Vector2 content_offset;
 		Vector2 offset;
 		offset += state_machine->get_node_position(E) * EDSCALE;
 
@@ -1191,19 +1169,25 @@ void AnimationNodeStateMachineEditor::_state_machine_draw() {
 			offset += drag_ofs;
 		}
 
+		content_offset = offset;
 		offset -= s / 2;
 		offset = offset.floor();
+		content_offset -= content_size / 2;
+		content_offset = content_offset.floor();
 
 		//prepre rect
 
 		NodeRect nr;
 		nr.node = Rect2(offset, s);
 		nr.node_name = E;
+		nr.content_rect = Rect2(content_offset, content_size);
 
 		scroll_range = scroll_range.merge(nr.node); //merge with range
+		scroll_range = scroll_range.merge(nr.content_rect); //merge with range
 
 		//now scroll it to draw
 		nr.node.position -= state_machine->get_graph_offset() * EDSCALE;
+		nr.content_rect.position -= state_machine->get_graph_offset() * EDSCALE;
 
 		node_rects.push_back(nr);
 	}
@@ -1257,6 +1241,8 @@ void AnimationNodeStateMachineEditor::_state_machine_draw() {
 
 		tl.from_node = transition_owner->get_transition_from(i);
 		tl.to_node = transition_owner->get_transition_to(i);
+		tl.from_node_full = tl.from_node;
+		tl.to_node_full = tl.to_node;
 
 		String to_node = tl.to_node;
 		String from_node = tl.from_node;
@@ -1399,8 +1385,6 @@ void AnimationNodeStateMachineEditor::_state_machine_draw() {
 		bool is_selected = selected_nodes.has(name);
 
 		NodeRect &nr = node_rects.write[i];
-		Vector2 offset = nr.node.position;
-		int h = nr.node.size.height;
 
 		//prepre rect
 
@@ -1421,6 +1405,8 @@ void AnimationNodeStateMachineEditor::_state_machine_draw() {
 			state_machine_draw->draw_style_box(theme_cache.node_frame_playing, nr.node);
 		}
 
+		Vector2 offset = nr.node.position;
+		int h = nr.node.size.height;
 		offset.x += node_frame_style->get_offset().x;
 
 		if (state_machine->any_state_node == name) {
@@ -1444,15 +1430,17 @@ void AnimationNodeStateMachineEditor::_state_machine_draw() {
 			offset.x += sep + theme_cache.play_node->get_width();
 		}
 
-		nr.name.position = offset + Vector2(0, (h - theme_cache.node_title_font->get_height(theme_cache.node_title_font_size)) / 2).floor();
+		offset = nr.node.position + Vector2(0, (h - theme_cache.node_title_font->get_height(theme_cache.node_title_font_size)) / 2).floor();
+		state_machine_draw->draw_string(theme_cache.node_title_font, offset + Vector2(0, theme_cache.node_title_font->get_ascent(theme_cache.node_title_font_size)), name, HORIZONTAL_ALIGNMENT_CENTER, nr.node.size.x, theme_cache.node_title_font_size, theme_cache.node_title_font_color);
+		nr.name.position = nr.content_rect.position + Vector2(nr.content_rect.size.x / 2 - name_string_size / 2, (h - theme_cache.node_title_font->get_height(theme_cache.node_title_font_size)) / 2).floor();
 		nr.name.size = Vector2(name_string_size, theme_cache.node_title_font->get_height(theme_cache.node_title_font_size));
-
-		state_machine_draw->draw_string(theme_cache.node_title_font, nr.name.position + Vector2(0, theme_cache.node_title_font->get_ascent(theme_cache.node_title_font_size)), name, HORIZONTAL_ALIGNMENT_LEFT, -1, theme_cache.node_title_font_size, theme_cache.node_title_font_color);
-		offset.x += name_string_size + sep;
 
 		nr.can_edit = needs_editor;
 		if (needs_editor) {
-			nr.edit.position = offset + Vector2(0, (h - theme_cache.edit_node->get_height()) / 2).floor();
+			offset = nr.node.position;
+			offset.x += nr.node.size.x - node_frame_style->get_offset().x - theme_cache.edit_node->get_width();
+			offset.y = offset.y - theme_cache.edit_node->get_height() / 2 + h / 2;
+			nr.edit.position = offset;// - Vector2(0, (h - theme_cache.edit_node->get_height()) / 2).floor();
 			nr.edit.size = theme_cache.edit_node->get_size();
 
 			if (hovered_node_name == name && hovered_node_area == HOVER_NODE_EDIT) {
@@ -1520,15 +1508,11 @@ void AnimationNodeStateMachineEditor::_state_machine_pos_draw_individual(const S
 	}
 
 	Vector2 from;
-	from.x = nr.play.position.x;
+	from.x = nr.node.position.x + nr.play.size.x / 2;
 	from.y = (nr.play.position.y + nr.play.size.y + nr.node.position.y + nr.node.size.y) * 0.5;
 
 	Vector2 to;
-	if (nr.edit.size.x) {
-		to.x = nr.edit.position.x + nr.edit.size.x;
-	} else {
-		to.x = nr.name.position.x + nr.name.size.x;
-	}
+	to.x = nr.node.position.x + nr.node.size.x - nr.play.size.x / 2 - 1;
 	to.y = from.y;
 
 	state_machine_play_pos->draw_line(from, to, theme_cache.playback_background_color, 2);
@@ -1595,8 +1579,8 @@ void AnimationNodeStateMachineEditor::_notification(int p_what) {
 			tool_erase->set_icon(theme_cache.tool_icon_erase);
 
 			play_mode->clear();
-			play_mode->add_icon_item(theme_cache.play_icon_travel, TTR("Travel"));
 			play_mode->add_icon_item(theme_cache.play_icon_start, TTR("Immediate"));
+			play_mode->add_icon_item(theme_cache.play_icon_travel, TTR("Travel"));
 		} break;
 
 		case NOTIFICATION_PROCESS: {
@@ -1922,8 +1906,8 @@ void AnimationNodeStateMachineEditor::_erase_selected(const bool p_nested_action
 		}
 		EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
 		undo_redo->create_action(TTR("Transition Removed"));
-		undo_redo->add_do_method(state_machine.ptr(), "remove_transition", from, to);
-		undo_redo->add_undo_method(state_machine.ptr(), "add_transition", from, to, tr);
+		undo_redo->add_do_method(transition_owner, "remove_transition", from, to);
+		undo_redo->add_undo_method(transition_owner, "add_transition", from, to, tr);
 		undo_redo->add_do_method(this, "_update_graph");
 		undo_redo->add_undo_method(this, "_update_graph");
 		undo_redo->commit_action();
@@ -2295,7 +2279,7 @@ void AnimationNodeStateMachineEditor::drop_data_fw(const Point2 &p_point, const 
 		int drop_index = d["transition_index"];
 
 		AnimationNodeStateMachine *transition_owner = state_machine->get_sub_state_parent();
-		transition_owner->swap_transitions(drop_index, transition_index);
+		transition_owner->reorder_transition(drop_index, transition_index);
 
 		_show_state_transitions_window(transitions_window_node);
 	}

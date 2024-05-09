@@ -2183,13 +2183,13 @@ void EditorThemeManager::_populate_editor_styles(const Ref<EditorTheme> &p_theme
 			const int sm_margin_bottom = 2;
 			const Color sm_bg_color = p_config.dark_theme ? p_config.dark_color_3 : p_config.dark_color_1.lerp(p_config.mono_color, 0.09);
 
-			Ref<StyleBoxFlat> sm_node_style = make_flat_stylebox(p_config.dark_color_3 * Color(1, 1, 1, 0.7), sm_margin_side, 24 * EDSCALE, sm_margin_side, sm_margin_bottom, p_config.corner_radius);
+			Ref<StyleBoxFlat> sm_node_style = make_flat_stylebox(p_config.dark_color_3 * Color(1, 1, 1, 1), sm_margin_side, 24 * EDSCALE, sm_margin_side, sm_margin_bottom, p_config.corner_radius);
 			sm_node_style->set_border_width_all(p_config.border_width);
 			sm_node_style->set_border_color(sm_bg_color);
 
-			Ref<StyleBoxFlat> sm_node_selected_style = make_flat_stylebox(sm_bg_color * Color(1, 1, 1, 0.9), sm_margin_side, 24 * EDSCALE, sm_margin_side, sm_margin_bottom, p_config.corner_radius);
+			Ref<StyleBoxFlat> sm_node_selected_style = make_flat_stylebox(sm_bg_color * Color(1, 1, 1, 1), sm_margin_side, 24 * EDSCALE, sm_margin_side, sm_margin_bottom, p_config.corner_radius);
 			sm_node_selected_style->set_border_width_all(2 * EDSCALE + p_config.border_width);
-			sm_node_selected_style->set_border_color(p_config.accent_color * Color(1, 1, 1, 0.9));
+			sm_node_selected_style->set_border_color(p_config.accent_color * Color(1, 1, 1, 1));
 			sm_node_selected_style->set_shadow_size(8 * EDSCALE);
 			sm_node_selected_style->set_shadow_color(p_config.shadow_color);
 

@@ -56,6 +56,7 @@ private:
 	StringName advance_condition;
 	StringName advance_condition_name;
 	float xfade_time = 0.0;
+	float exit_time = 1.0;
 	Ref<Curve> xfade_curve;
 	bool reset = true;
 	int priority = 1;
@@ -84,6 +85,9 @@ public:
 
 	void set_xfade_time(float p_xfade);
 	float get_xfade_time() const;
+
+	void set_exit_time(float p_exit_time);
+	float get_exit_time() const;
 
 	void set_reset(bool p_reset);
 	bool is_reset() const;
@@ -212,7 +216,7 @@ public:
 	void remove_transition_by_index_node(const int p_transition, bool remove_by_node);
 	void remove_multi_transition(const StringName &p_from, const StringName &p_to, int index);
 	void remove_transition(const StringName &p_from, const StringName &p_to);
-	void swap_transitions(const int p_from, const int p_to);
+	void reorder_transition(const int p_from, const int p_to);
 
 	void set_state_machine_type(StateMachineType p_state_machine_type);
 	StateMachineType get_state_machine_type() const;
@@ -266,6 +270,7 @@ class AnimationNodeStateMachinePlayback : public Resource {
 		StringName node;
 		StringName node_full_path;
 		double xfade;
+		double exit_time;
 		Ref<Curve> curve;
 		AnimationNodeStateMachineTransition::SwitchMode switch_mode;
 		bool is_reset;

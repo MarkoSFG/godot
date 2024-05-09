@@ -42,6 +42,7 @@ class AnimationNodeAnimation : public AnimationRootNode {
 	uint64_t last_version = 0;
 	bool skip = false;
 	Vector<double> cur_time_list;
+	double speed;
 
 public:
 	enum PlayMode {
@@ -63,6 +64,9 @@ public:
 
 	void set_play_mode(PlayMode p_play_mode);
 	PlayMode get_play_mode() const;
+
+	void set_speed(double p_speed);
+	double get_speed() const;
 
 	void set_backward(bool p_backward);
 	bool is_backward() const;

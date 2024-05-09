@@ -194,27 +194,30 @@ void AnimationNodeBlendTreeEditor::update_graph() {
 			node->set_slot(base + i, true, read_only ? -1 : 0, get_theme_color(SNAME("font_color"), SNAME("Label")), false, 0, Color());
 		}
 
-		List<PropertyInfo> pinfo;
-		agnode->get_parameter_list(&pinfo);
-		bool using_shared_params = (int)tree->get(AnimationTreeEditor::get_singleton()->get_base_path() + String(E) + "/param_mode") == AnimationNode::PARAMETER;
-		for (const PropertyInfo &F : pinfo) {
-			if (!(F.usage & PROPERTY_USAGE_EDITOR)) {
-				continue;
-			}
-			if (using_shared_params && F.name == "blend_amount" ||
-				!using_shared_params && F.name == "parameter") {
-				continue;
-			}
-			String base_path = AnimationTreeEditor::get_singleton()->get_base_path() + String(E) + "/" + F.name;
-			EditorProperty *prop = EditorInspector::instantiate_property_editor(tree, F.type, base_path, F.hint, F.hint_string, F.usage);
-			if (prop) {
-				prop->set_read_only(read_only || (F.usage & PROPERTY_USAGE_READ_ONLY));
-				prop->set_object_and_property(tree, base_path);
-				prop->update_property();
-				prop->set_name_split_ratio(0);
-				prop->connect("property_changed", callable_mp(this, &AnimationNodeBlendTreeEditor::_property_changed).bind(agnode), CONNECT_DEFERRED);
-				node->add_child(prop);
-				visible_properties.push_back(prop);
+		// don't show random booleans in graph for state machines
+		if (!agnode->is_state_machine()) {
+			List<PropertyInfo> pinfo;
+			agnode->get_parameter_list(&pinfo);
+			bool using_shared_params = (int)tree->get(AnimationTreeEditor::get_singleton()->get_base_path() + String(E) + "/param_mode") == AnimationNode::PARAMETER;
+			for (const PropertyInfo &F : pinfo) {
+				if (!(F.usage & PROPERTY_USAGE_EDITOR)) {
+					continue;
+				}
+				if (using_shared_params && F.name == "blend_amount" ||
+						!using_shared_params && F.name == "parameter") {
+					continue;
+				}
+				String base_path = AnimationTreeEditor::get_singleton()->get_base_path() + String(E) + "/" + F.name;
+				EditorProperty *prop = EditorInspector::instantiate_property_editor(tree, F.type, base_path, F.hint, F.hint_string, F.usage);
+				if (prop) {
+					prop->set_read_only(read_only || (F.usage & PROPERTY_USAGE_READ_ONLY));
+					prop->set_object_and_property(tree, base_path);
+					prop->update_property();
+					prop->set_name_split_ratio(0);
+					prop->connect("property_changed", callable_mp(this, &AnimationNodeBlendTreeEditor::_property_changed).bind(agnode), CONNECT_DEFERRED);
+					node->add_child(prop);
+					visible_properties.push_back(prop);
+				}
 			}
 		}
 
