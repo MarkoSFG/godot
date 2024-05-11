@@ -2278,6 +2278,11 @@ void AnimationNodeStateMachineEditor::drop_data_fw(const Point2 &p_point, const 
 	if (String(d["type"]) == "transition_index") {
 		int drop_index = d["transition_index"];
 
+		// if it was dropped at the bottom of the target item
+		if (section >= 1) {
+			++transition_index;
+		}
+
 		AnimationNodeStateMachine *transition_owner = state_machine->get_sub_state_parent();
 		transition_owner->reorder_transition(drop_index, transition_index);
 
