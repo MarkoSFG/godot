@@ -84,7 +84,7 @@ Ref<AnimationRootNode> AnimationNodeBlendSpace2DEditor::_dup_copy_point() {
 
 void AnimationNodeBlendSpace2DEditor::_dup_paste_point(Ref<AnimationNode> node, const Vector2 &p_position) {
 	EditorUndoRedoManager *undo_redo = EditorUndoRedoManager::get_singleton();
-	undo_redo->add_do_method(blend_space.ptr(), "add_blend_point", node->duplicate(), p_position);
+	undo_redo->add_do_method(blend_space.ptr(), "add_blend_point", node->duplicate(true), p_position);
 	undo_redo->add_do_method(this, "_update_space");
 	undo_redo->add_undo_method(blend_space.ptr(), "remove_blend_point", blend_space->get_blend_point_count());
 	undo_redo->add_undo_method(this, "_update_space");
