@@ -2247,10 +2247,42 @@ Error EditorFileSystem::_reimport_file(const String &p_file, const HashMap<Strin
 		}
 
 		if (slices.size() == 0) {
+			String file_path = p_file.substr(0, p_file.rfind("."));
 			bulk_data["save_to_file/enabled"] = Variant(true);
-			bulk_data["save_to_file/path"] = Variant(p_file.substr(0, p_file.rfind(".")) + ".res");
+			bulk_data["save_to_file/path"] = Variant(file_path + ".res");
 			bulk_data["save_to_file/keep_custom_tracks"] = Variant("");
-			bulk_data["settings/loop_mode"] = Variant(0); // by default do not set looping; will have to manually set loop mode to linear (to looping) for relevant anims
+			// set looping based on file name
+			int loop_mode = 0;
+			if (file_path.ends_with("idle") ||
+				file_path.ends_with("walk") ||
+				file_path.ends_with("walk right") ||
+				file_path.ends_with("walk left") ||
+				file_path.ends_with("walk back") ||
+				file_path.ends_with("walk blocking") ||
+				file_path.ends_with("walk right blocking") ||
+				file_path.ends_with("walk left blocking") ||
+				file_path.ends_with("walk back blocking") ||
+				file_path.ends_with("walk - blocking") ||
+				file_path.ends_with("walk right - blocking") ||
+				file_path.ends_with("walk left - blocking") ||
+				file_path.ends_with("walk back - blocking") ||
+				file_path.ends_with("jog") ||
+				file_path.ends_with("jog right") ||
+				file_path.ends_with("jog left") ||
+				file_path.ends_with("jog back") ||
+				file_path.ends_with("jog blocking") ||
+				file_path.ends_with("jog right blocking") ||
+				file_path.ends_with("jog left blocking") ||
+				file_path.ends_with("jog back blocking") ||
+				file_path.ends_with("jog - blocking") ||
+				file_path.ends_with("jog right - blocking") ||
+				file_path.ends_with("jog left - blocking") ||
+				file_path.ends_with("jog back - blocking") ||
+				file_path.ends_with("sprint") ||
+				file_path.ends_with("sprint blocking")) {
+				loop_mode = 1;
+			}
+			bulk_data["settings/loop_mode"] = Variant(loop_mode);
 		}
 
 		bulk_data["anim_library_path"] = anim_library_path;

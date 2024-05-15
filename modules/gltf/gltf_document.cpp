@@ -5767,7 +5767,9 @@ void GLTFDocument::_import_animation(Ref<GLTFState> p_state, AnimationPlayer *p_
 			}
 			if (track.rotation_track.values.size()) {
 				bool is_default = true; //discard the track if all it contains is default values
-				if (p_remove_immutable_tracks) {
+				if (node_path.get_name_count() == 1 && node_path.get_name(0) == "root") {
+					is_default = false; // don't remove rotation track from root (typically we use this as the root motion node)
+				} else if (p_remove_immutable_tracks) {
 					Quaternion base_rot = gltf_node->get_rotation();
 					for (int i = 0; i < track.rotation_track.times.size(); i++) {
 						int value_index = track.rotation_track.interpolation == GLTFAnimation::INTERP_CUBIC_SPLINE ? (1 + i * 3) : i;

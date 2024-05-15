@@ -104,7 +104,8 @@ void EditorPropertyRootMotion::_node_assign() {
 				}
 				parenthood[accum] = ti;
 				ti->set_text(0, name);
-				ti->set_selectable(0, false);
+				ti->set_selectable(0, true); // node / Skeleton3D should be selectable here, why wouldn't we allow selecting whatever bone the user wants as the root bone?
+				ti->set_metadata(0, accum);
 				ti->set_editable(0, false);
 
 				if (base->has_node(accum)) {
